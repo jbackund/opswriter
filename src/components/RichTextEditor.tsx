@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Table } from '@tiptap/extension-table'
@@ -43,6 +44,8 @@ interface RichTextEditorProps {
 }
 
 export default function RichTextEditor({ content, onChange, placeholder, readOnly = false }: RichTextEditorProps) {
+  const lastContentRef = useRef(content)
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -74,11 +77,28 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
     editable: !readOnly,
     onUpdate: ({ editor }) => {
       if (!readOnly) {
-        onChange(editor.getHTML())
+        const html = editor.getHTML()
+        lastContentRef.current = html
+        onChange(html)
       }
     },
     immediatelyRender: false,
   })
+
+  useEffect(() => {
+    if (!editor) return
+    const incoming = content ?? ''
+    if (incoming === lastContentRef.current) {
+      return
+    }
+    editor.commands.setContent(incoming, false)
+    lastContentRef.current = incoming
+  }, [editor, content])
+
+  useEffect(() => {
+    if (!editor) return
+    editor.setEditable(!readOnly)
+  }, [editor, readOnly])
 
   if (!editor) {
     return null
@@ -104,9 +124,9 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
 
   return (
     <div className="border border-gray-300 rounded-lg overflow-hidden">
-      {/* Toolbar */}
-      <div className="bg-gray-50 border-b border-gray-300 px-2 py-1">
-        <div className="flex flex-wrap items-center gap-1">
+      {!readOnly && (
+        <div className="bg-gray-50 border-b border-gray-300 px-2 py-1">
+          <div className="flex flex-wrap items-center gap-1">
           {/* Text formatting */}
           <div className="flex items-center border-r pr-1 mr-1">
             <button
@@ -288,8 +308,9 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
               <Redo className="h-4 w-4" />
             </button>
           </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Editor */}
       <EditorContent

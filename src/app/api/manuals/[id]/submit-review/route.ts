@@ -111,7 +111,6 @@ export async function POST(
     .from('manuals')
     .update({
       status: 'in_review',
-      current_revision: revisionNumber,
       updated_at: new Date().toISOString(),
       updated_by: user.id,
     })

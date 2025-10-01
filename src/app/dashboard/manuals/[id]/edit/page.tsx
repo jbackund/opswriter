@@ -73,7 +73,8 @@ export default async function EditManualPage({ params }: PageProps) {
   }
 
   // Check if manual is editable (draft or rejected status)
-  if (manual.status !== 'draft' && manual.status !== 'rejected') {
+  const manualStatus = typeof manual.status === 'string' ? manual.status.toLowerCase() : manual.status
+  if (manualStatus !== 'draft' && manualStatus !== 'rejected') {
     redirect(`/dashboard/manuals/${id}/view`)
   }
 

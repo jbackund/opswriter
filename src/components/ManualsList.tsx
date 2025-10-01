@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import {
-  Plus,
   Search,
   Filter,
   Edit,
@@ -38,18 +37,15 @@ interface Manual {
   is_archived: boolean
 }
 
-type ViewerRole = 'manager' | 'sysadmin' | null
-
 interface ManualsListProps {
   initialManuals: Manual[]
-  viewerRole?: ViewerRole
 }
 
 type SortField = 'title' | 'manual_code' | 'current_revision' | 'status' | 'effective_date' | 'created_by_user' | 'updated_at'
 type SortDirection = 'asc' | 'desc'
 type StatusFilter = 'all' | 'draft' | 'in_review' | 'approved' | 'rejected'
 
-export default function ManualsList({ initialManuals, viewerRole = null }: ManualsListProps) {
+export default function ManualsList({ initialManuals }: ManualsListProps) {
   const [manuals, setManuals] = useState<Manual[]>(initialManuals)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -222,17 +218,21 @@ export default function ManualsList({ initialManuals, viewerRole = null }: Manua
         throw new Error(payload?.error || 'Failed to submit manual for review')
       }
 
-      const revisionNumber = payload?.revision?.revision_number || manual.current_revision
-
       setManuals(prev =>
         prev.map(item =>
           item.id === manual.id
-            ? { ...item, status: 'in_review', current_revision: revisionNumber }
+            ? { ...item, status: 'in_review' }
             : item
         )
       )
 
-      setActionFeedback({ type: 'success', message: 'Manual submitted for review.' })
+      const revisionNumber = payload?.revision?.revision_number
+      setActionFeedback({
+        type: 'success',
+        message: revisionNumber
+          ? `Manual submitted for review as revision ${revisionNumber}.`
+          : 'Manual submitted for review.',
+      })
     } catch (error: any) {
       setActionFeedback({
         type: 'error',
@@ -509,19 +509,13 @@ export default function ManualsList({ initialManuals, viewerRole = null }: Manua
                               </>
                             )}
                             {manual.status === 'in_review' && (
-                              viewerRole === 'sysadmin' ? (
-                                <Link
-                                  href={`/dashboard/manuals/${manual.id}/review`}
-                                  className="text-status-orange hover:opacity-90"
-                                  title="Review Manual"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Link>
-                              ) : (
-                                <span className="text-status-orange" title="In Review">
-                                  <Eye className="h-4 w-4" />
-                                </span>
-                              )
+                              <Link
+                                href={`/dashboard/manuals/${manual.id}/review`}
+                                className="text-status-orange hover:opacity-90"
+                                title="Review Manual"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Link>
                             )}
                             {manual.status === 'approved' && (
                               <>

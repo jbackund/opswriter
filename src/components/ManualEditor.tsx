@@ -115,6 +115,23 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   const [comparingRevisions, setComparingRevisions] = useState<{ revA: any; revB: any } | null>(null)
   const [restoringRevision, setRestoringRevision] = useState<any>(null)
 
+  const normalizedManualStatus = typeof manual.status === 'string' ? manual.status.toLowerCase() : manual.status
+  const isReadOnly = readOnly || normalizedManualStatus === 'in_review' || normalizedManualStatus === 'approved'
+  const statusBadgeClass = (() => {
+    switch (normalizedManualStatus) {
+      case 'draft':
+        return 'bg-orange-100 text-orange-800'
+      case 'in_review':
+        return 'bg-yellow-100 text-yellow-800'
+      case 'approved':
+        return 'bg-green-100 text-green-800'
+      case 'rejected':
+        return 'bg-red-100 text-red-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  })()
+
   // Load chapter 0 by default
   useEffect(() => {
     const chapter0 = chapters.find(ch => ch.chapter_number === 0)
@@ -129,6 +146,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   // Autosave effect
   useEffect(() => {
     if (!selectedChapter) return
+    if (isReadOnly) return
 
     // Clear existing timer
     if (autoSaveTimer) {
@@ -323,7 +341,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   // Select chapter for editing
   const selectChapter = (chapter: Chapter) => {
     // Save current chapter if changed
-    if (selectedChapter && (
+    if (!isReadOnly && selectedChapter && (
       chapterTitle !== selectedChapter.heading ||
       chapterContent !== selectedChapter.content ||
       pageBreakBefore !== selectedChapter.page_break
@@ -341,6 +359,9 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
   // Add new chapter
   const addChapter = async (parentId: string | null = null) => {
+    if (isReadOnly) {
+      return
+    }
     try {
       // Calculate chapter number and depth
       const siblings = chapters.filter(ch => ch.parent_id === parentId)
@@ -425,6 +446,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   // Save chapter
   const saveChapter = async (isAutoSave = false) => {
     if (!selectedChapter) return
+    if (isReadOnly) return
 
     if (!isAutoSave) {
       setSaving(true)
@@ -474,6 +496,9 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
   // Delete chapter
   const deleteChapter = async (chapterId: string) => {
+    if (isReadOnly) {
+      return
+    }
     const chapterToDelete = chapters.find(ch => ch.id === chapterId)
     if (!chapterToDelete) return
 
@@ -573,6 +598,9 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
   // Move chapter up in order
   const moveChapterUp = async (chapterId: string) => {
+    if (isReadOnly) {
+      return
+    }
     const chapter = chapters.find(ch => ch.id === chapterId)
     if (!chapter) return
 
@@ -631,6 +659,9 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
   // Move chapter down in order
   const moveChapterDown = async (chapterId: string) => {
+    if (isReadOnly) {
+      return
+    }
     const chapter = chapters.find(ch => ch.id === chapterId)
     if (!chapter) return
 
@@ -715,6 +746,9 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
   // Send manual for review
   const sendForReview = async () => {
+    if (isReadOnly) {
+      return
+    }
     if (!confirm('Are you sure you want to send this manual for review? You will not be able to edit it while it\'s under review.')) {
       return
     }
@@ -733,15 +767,17 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
         throw new Error(payload?.error || 'Failed to submit manual for review')
       }
 
-      const nextRevision = payload?.revision?.revision_number || manual.current_revision
-
       setManual(prev => ({
         ...prev,
         status: 'in_review',
-        current_revision: nextRevision,
       }))
 
-      setSuccess('Manual submitted for review. Redirecting to read-only view...')
+      const nextRevision = payload?.revision?.revision_number
+      setSuccess(
+        nextRevision
+          ? `Manual submitted for review as revision ${nextRevision}. Redirecting to read-only view...`
+          : 'Manual submitted for review. Redirecting to read-only view...'
+      )
 
       setTimeout(() => {
         router.push(`/dashboard/manuals/${manual.id}/view`)
@@ -816,64 +852,68 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
           </div>
 
           <div className="flex items-center space-x-1">
-            {reorderMode && chapter.chapter_number !== 0 && (
+            {!isReadOnly && (
               <>
+                {reorderMode && chapter.chapter_number !== 0 && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        moveChapterUp(chapter.id)
+                      }}
+                      className={`p-1 hover:bg-gray-200 rounded ${!canMoveUp(chapter.id) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      title="Move up"
+                      disabled={!canMoveUp(chapter.id)}
+                    >
+                      <MoveUp className="h-3 w-3 text-gray-500" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        moveChapterDown(chapter.id)
+                      }}
+                      className={`p-1 hover:bg-gray-200 rounded ${!canMoveDown(chapter.id) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      title="Move down"
+                      disabled={!canMoveDown(chapter.id)}
+                    >
+                      <MoveDown className="h-3 w-3 text-gray-500" />
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    moveChapterUp(chapter.id)
+                    setEditingChapter(chapter.id)
+                    setChapterTitle(chapter.heading)
                   }}
-                  className={`p-1 hover:bg-gray-200 rounded ${!canMoveUp(chapter.id) ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  title="Move up"
-                  disabled={!canMoveUp(chapter.id)}
+                  className="p-1 hover:bg-gray-200 rounded"
+                  title="Rename"
                 >
-                  <MoveUp className="h-3 w-3 text-gray-500" />
+                  <Edit3 className="h-3 w-3 text-gray-500" />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    moveChapterDown(chapter.id)
+                    addChapter(chapter.id)
                   }}
-                  className={`p-1 hover:bg-gray-200 rounded ${!canMoveDown(chapter.id) ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  title="Move down"
-                  disabled={!canMoveDown(chapter.id)}
+                  className="p-1 hover:bg-gray-200 rounded"
+                  title="Add subchapter"
                 >
-                  <MoveDown className="h-3 w-3 text-gray-500" />
+                  <Plus className="h-3 w-3 text-gray-500" />
                 </button>
+                {chapter.chapter_number !== 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteChapter(chapter.id)
+                    }}
+                    className="p-1 hover:bg-gray-200 rounded"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3 w-3 text-gray-500" />
+                  </button>
+                )}
               </>
-            )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setEditingChapter(chapter.id)
-                setChapterTitle(chapter.heading)
-              }}
-              className="p-1 hover:bg-gray-200 rounded"
-              title="Rename"
-            >
-              <Edit3 className="h-3 w-3 text-gray-500" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                addChapter(chapter.id)
-              }}
-              className="p-1 hover:bg-gray-200 rounded"
-              title="Add subchapter"
-            >
-              <Plus className="h-3 w-3 text-gray-500" />
-            </button>
-            {chapter.chapter_number !== 0 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  deleteChapter(chapter.id)
-                }}
-                className="p-1 hover:bg-gray-200 rounded"
-                title="Delete"
-              >
-                <Trash2 className="h-3 w-3 text-gray-500" />
-              </button>
             )}
           </div>
         </div>
@@ -910,13 +950,8 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                   <GitBranch className="h-3 w-3" />
                   Rev {manual.current_revision}
                 </span>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  manual.status === 'draft' ? 'bg-orange-100 text-orange-800' :
-                  manual.status === 'in_review' ? 'bg-yellow-100 text-yellow-800' :
-                  manual.status === 'approved' ? 'bg-green-100 text-green-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {manual.status.replace('_', ' ').toUpperCase()}
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadgeClass}`}>
+                  {typeof manual.status === 'string' ? manual.status.replace('_', ' ').toUpperCase() : manual.status}
                 </span>
               </div>
               <div className="flex items-center space-x-3 mt-1 text-sm text-gray-500">
@@ -929,7 +964,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
               </div>
             </div>
           </div>
-          {!readOnly && (
+          {!isReadOnly && (
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setShowMetadataModal(true)}
@@ -938,7 +973,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                 <Settings className="h-4 w-4 mr-1" />
                 Metadata
               </button>
-              {['draft', 'rejected'].includes(manual.status) && (
+              {['draft', 'rejected'].includes(normalizedManualStatus) && (
                 <button
                   onClick={sendForReview}
                   disabled={saving}
@@ -989,7 +1024,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       )}
 
       {/* Read-only banner */}
-      {readOnly && (
+      {isReadOnly && (
         <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
           <div className="flex items-center">
             <Shield className="h-5 w-5 text-blue-500 mr-2" />
@@ -998,8 +1033,8 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                 View-Only Mode
               </p>
               <p className="text-xs text-blue-700 mt-0.5">
-                This manual is {manual.status === 'approved' ? 'approved' : 'in review'} and cannot be edited.
-                {manual.status === 'approved' && ' To make changes, create a new draft revision.'}
+                This manual is {normalizedManualStatus === 'approved' ? 'approved' : 'in review'} and cannot be edited.
+                {normalizedManualStatus === 'approved' && ' To make changes, create a new draft revision.'}
               </p>
             </div>
           </div>
@@ -1055,46 +1090,50 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
           <div className="p-4 border-b">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-semibold text-gray-900">Chapters</h2>
-              <button
-                onClick={() => addChapter(null)}
-                className="p-1.5 hover:bg-gray-100 rounded"
-                title="Add chapter"
-              >
-                <Plus className="h-4 w-4 text-gray-600" />
-              </button>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setReorderMode(!reorderMode)}
-                className={`px-3 py-1 text-xs font-medium rounded-md ${
-                  reorderMode
-                    ? 'bg-docgen-blue text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                {reorderMode ? 'Done Reordering' : 'Reorder Chapters'}
-              </button>
-              {reorderMode && (
-                <>
-                  <button
-                    onClick={undo}
-                    disabled={historyIndex === 0}
-                    className="p-1.5 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Undo"
-                  >
-                    <Undo2 className="h-4 w-4 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={redo}
-                    disabled={historyIndex === chaptersHistory.length - 1}
-                    className="p-1.5 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Redo"
-                  >
-                    <Redo2 className="h-4 w-4 text-gray-600" />
-                  </button>
-                </>
+              {!isReadOnly && (
+                <button
+                  onClick={() => addChapter(null)}
+                  className="p-1.5 hover:bg-gray-100 rounded"
+                  title="Add chapter"
+                >
+                  <Plus className="h-4 w-4 text-gray-600" />
+                </button>
               )}
             </div>
+            {!isReadOnly && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setReorderMode(!reorderMode)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md ${
+                    reorderMode
+                      ? 'bg-docgen-blue text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {reorderMode ? 'Done Reordering' : 'Reorder Chapters'}
+                </button>
+                {reorderMode && (
+                  <>
+                    <button
+                      onClick={undo}
+                      disabled={historyIndex === 0}
+                      className="p-1.5 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Undo"
+                    >
+                      <Undo2 className="h-4 w-4 text-gray-600" />
+                    </button>
+                    <button
+                      onClick={redo}
+                      disabled={historyIndex === chaptersHistory.length - 1}
+                      className="p-1.5 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Redo"
+                    >
+                      <Redo2 className="h-4 w-4 text-gray-600" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto p-2">
             {chapterTree.map(chapter => renderChapterItem(chapter))}
@@ -1111,45 +1150,59 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                     <h2 className="text-lg font-semibold text-gray-900">
                       Chapter {selectedChapter.chapter_number}: {selectedChapter.heading}
                     </h2>
-                    <div className="flex items-center mt-1 text-xs text-gray-500">
-                      {hasUnsavedChanges && (
-                        <span className="text-yellow-600 font-medium">Unsaved changes</span>
-                      )}
-                      {!hasUnsavedChanges && lastSaved && (
-                        <span className="text-green-600">
-                          Last saved {lastSaved.toLocaleTimeString()}
-                        </span>
-                      )}
-                      <span className="ml-2">• Auto-saves every 30 seconds</span>
-                    </div>
+                    {!isReadOnly ? (
+                      <div className="flex items-center mt-1 text-xs text-gray-500">
+                        {hasUnsavedChanges && (
+                          <span className="text-yellow-600 font-medium">Unsaved changes</span>
+                        )}
+                        {!hasUnsavedChanges && lastSaved && (
+                          <span className="text-green-600">
+                            Last saved {lastSaved.toLocaleTimeString()}
+                          </span>
+                        )}
+                        <span className="ml-2">• Auto-saves every 30 seconds</span>
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-xs text-gray-500">
+                        Viewing snapshot of Chapter {selectedChapter.chapter_number}.
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center space-x-4">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={pageBreakBefore}
-                        onChange={(e) => setPageBreakBefore(e.target.checked)}
-                        className="rounded border-gray-300 text-docgen-blue focus:ring-docgen-blue"
-                      />
-                      <span className="ml-2 text-sm text-gray-600">Page break before</span>
-                    </label>
-                    <button
-                      onClick={() => saveChapter(false)}
-                      disabled={saving || !hasUnsavedChanges}
-                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-docgen-blue hover:opacity-90 disabled:opacity-50"
-                    >
-                      {saving ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4 mr-1" />
-                          Save Now
-                        </>
-                      )}
-                    </button>
+                    {isReadOnly ? (
+                      <span className="text-sm text-gray-600">
+                        Page break before: {pageBreakBefore ? 'Enabled' : 'Disabled'}
+                      </span>
+                    ) : (
+                      <>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={pageBreakBefore}
+                            onChange={(e) => setPageBreakBefore(e.target.checked)}
+                            className="rounded border-gray-300 text-docgen-blue focus:ring-docgen-blue"
+                          />
+                          <span className="ml-2 text-sm text-gray-600">Page break before</span>
+                        </label>
+                        <button
+                          onClick={() => saveChapter(false)}
+                          disabled={saving || !hasUnsavedChanges}
+                          className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-docgen-blue hover:opacity-90 disabled:opacity-50"
+                        >
+                          {saving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4 mr-1" />
+                              Save Now
+                            </>
+                          )}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1162,7 +1215,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                     content={chapterContent}
                     onChange={setChapterContent}
                     placeholder="Enter chapter content..."
-                    readOnly={readOnly}
+                    readOnly={isReadOnly}
                   />
                   <div className="mt-4 flex items-center text-sm text-gray-500">
                     <span>Use the toolbar above to format your content. Tables, images, and links are supported.</span>

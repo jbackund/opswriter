@@ -20,16 +20,6 @@ export default async function ManualReviewPage({ params }: PageProps) {
     redirect('/login')
   }
 
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'sysadmin') {
-    redirect('/dashboard/manuals')
-  }
-
   const {
     data: manual,
     error: manualError,

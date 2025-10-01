@@ -33,19 +33,6 @@ export async function POST(
   const manualId = params.id
 
   const {
-    data: profile,
-    error: profileError,
-  } = await supabase
-    .from('user_profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profileError || profile?.role !== 'sysadmin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
-  const {
     data: revision,
     error: revisionError,
   } = await supabase
