@@ -42,11 +42,11 @@
 - [x] Support autosave, discard changes, inline references, cross-links
 
 ## 7. Revision Management & Audit Trail
-- [ ] Persist per-field revision history and change metadata
-- [ ] Display history tab with diff viewer (including page-break toggle changes)
-- [ ] Implement rollback mechanism for manual or chapter level
-- [ ] Set revision numbering scheme (start at 0; draft decimals until approval)
-- [ ] Log all CRUD operations to audit trail with actor, timestamps, before/after snapshots
+- [x] Persist per-field revision history and change metadata
+- [x] Display history tab with diff viewer (including page-break toggle changes)
+- [x] Implement rollback mechanism for manual or chapter level
+- [x] Set revision numbering scheme (start at 0; draft decimals until approval)
+- [x] Log all CRUD operations to audit trail with actor, timestamps, before/after snapshots
 
 ## 8. Review Workflow
 - [ ] Implement `Send in review` action generating immutable snapshot and freezing edits

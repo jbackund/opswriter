@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import RichTextEditor from './RichTextEditor'
+import RevisionHistory from './RevisionHistory'
+import RevisionViewer from './RevisionViewer'
+import DiffViewer from './DiffViewer'
+import RestoreModal from './RestoreModal'
+import AuditTrail from './AuditTrail'
 import {
   Save,
   Plus,
@@ -26,7 +31,10 @@ import {
   MoveUp,
   MoveDown,
   Undo2,
-  Redo2
+  Redo2,
+  History,
+  Shield,
+  GitBranch
 } from 'lucide-react'
 
 interface Chapter {
@@ -97,6 +105,14 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null)
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'audit'>('editor')
+
+  // Revision viewing state
+  const [viewingRevision, setViewingRevision] = useState<any>(null)
+  const [comparingRevisions, setComparingRevisions] = useState<{ revA: any; revB: any } | null>(null)
+  const [restoringRevision, setRestoringRevision] = useState<any>(null)
 
   // Load chapter 0 by default
   useEffect(() => {
@@ -385,6 +401,27 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
       setChapters(chaptersHistory[newIndex])
       setSuccess('Redo successful')
     }
+  }
+
+  // Revision handlers
+  const handleViewRevision = (revision: any) => {
+    setViewingRevision(revision)
+  }
+
+  const handleCompareRevisions = (revA: any, revB: any) => {
+    setComparingRevisions({ revA, revB })
+  }
+
+  const handleRestoreRevision = (revision: any) => {
+    setRestoringRevision(revision)
+  }
+
+  const handleRestoreSuccess = () => {
+    setRestoringRevision(null)
+    setSuccess('Revision restored successfully. Page will reload.')
+    setTimeout(() => {
+      router.refresh()
+    }, 2000)
   }
 
   // Move chapter up in order
@@ -700,8 +737,17 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
                   <Hash className="h-3 w-3 mr-1" />
                   {manual.manual_code}
                 </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <GitBranch className="h-3 w-3" />
                   Rev {manual.current_revision}
+                </span>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  manual.status === 'draft' ? 'bg-orange-100 text-orange-800' :
+                  manual.status === 'in_review' ? 'bg-yellow-100 text-yellow-800' :
+                  manual.status === 'approved' ? 'bg-green-100 text-green-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {manual.status.replace('_', ' ').toUpperCase()}
                 </span>
               </div>
               <div className="flex items-center space-x-3 mt-1 text-sm text-gray-500">
@@ -769,8 +815,50 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
         </div>
       )}
 
+      {/* Tabs */}
+      <div className="border-b bg-white px-6">
+        <nav className="flex space-x-8">
+          <button
+            onClick={() => setActiveTab('editor')}
+            className={`py-4 px-1 inline-flex items-center gap-2 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'editor'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Book className="h-4 w-4" />
+            Editor
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`py-4 px-1 inline-flex items-center gap-2 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'history'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <History className="h-4 w-4" />
+            Revision History
+          </button>
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`py-4 px-1 inline-flex items-center gap-2 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'audit'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Shield className="h-4 w-4" />
+            Audit Trail
+          </button>
+        </nav>
+      </div>
+
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
+        {/* Editor Tab */}
+        {activeTab === 'editor' && (
+          <>
         {/* Chapter navigation sidebar */}
         <div className="w-80 bg-white border-r flex flex-col">
           <div className="p-4 border-b">
@@ -899,7 +987,69 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
             </div>
           )}
         </div>
+          </>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <div className="flex-1 p-6 overflow-y-auto bg-gray-50">
+            <RevisionHistory
+              manualId={manual.id}
+              currentRevision={manual.current_revision}
+              onViewRevision={handleViewRevision}
+              onRestoreRevision={handleRestoreRevision}
+              onCompareRevisions={handleCompareRevisions}
+            />
+          </div>
+        )}
+
+        {/* Audit Trail Tab */}
+        {activeTab === 'audit' && (
+          <div className="flex-1 p-6 overflow-y-auto bg-gray-50">
+            <AuditTrail manualId={manual.id} />
+          </div>
+        )}
       </div>
+
+      {/* Modals and Overlays */}
+      {viewingRevision && (
+        <div className="fixed inset-0 bg-white z-50">
+          <RevisionViewer
+            revisionId={viewingRevision.id}
+            manualId={manual.id}
+            onClose={() => setViewingRevision(null)}
+            onCompareWithCurrent={() => {
+              // Get current manual state as a revision object
+              const currentRevision = {
+                id: 'current',
+                revision_number: manual.current_revision,
+                snapshot: { manual: { ...manual, chapters } },
+                created_at: new Date().toISOString(),
+                created_by_user: manual.created_by_user,
+              }
+              handleCompareRevisions(viewingRevision, currentRevision)
+              setViewingRevision(null)
+            }}
+          />
+        </div>
+      )}
+
+      {comparingRevisions && (
+        <DiffViewer
+          revisionA={comparingRevisions.revA}
+          revisionB={comparingRevisions.revB}
+          onClose={() => setComparingRevisions(null)}
+        />
+      )}
+
+      {restoringRevision && (
+        <RestoreModal
+          revision={restoringRevision}
+          manualId={manual.id}
+          onClose={() => setRestoringRevision(null)}
+          onSuccess={handleRestoreSuccess}
+        />
+      )}
     </div>
   )
 }
