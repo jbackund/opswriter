@@ -6,15 +6,34 @@ import ManualsList from '@/components/ManualsList'
 export default async function ManualsPage() {
   const supabase = await createClient()
 
-  // Get all manuals with user info
-  const { data: manuals } = await supabase
+  // Get all manuals
+  const { data: manuals, error } = await supabase
     .from('manuals')
-    .select(`
-      *,
-      created_by_user:user_profiles!manuals_created_by_fkey(full_name, email)
-    `)
+    .select('*')
     .eq('is_archived', false)
     .order('updated_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching manuals:', error)
+  }
+
+  // Get user profiles for all manual creators
+  let enrichedManuals = manuals || []
+  if (manuals && manuals.length > 0) {
+    const userIds = [...new Set(manuals.map(m => m.created_by))]
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('id, full_name, email')
+      .in('id', userIds)
+
+    if (profiles) {
+      const profilesMap = Object.fromEntries(profiles.map(p => [p.id, p]))
+      enrichedManuals = manuals.map(manual => ({
+        ...manual,
+        created_by_user: profilesMap[manual.created_by] || { full_name: 'Unknown', email: '' }
+      }))
+    }
+  }
 
   return (
     <div className="p-8">
@@ -36,7 +55,7 @@ export default async function ManualsPage() {
         </div>
       </div>
 
-      <ManualsList initialManuals={manuals || []} />
+      <ManualsList initialManuals={enrichedManuals} />
     </div>
   )
 }

@@ -36,10 +36,10 @@
 ## 6. Manual Structure & Editor
 - [x] Build navigation tree with chapters/subchapters and reference links
 - [x] Implement add/remove with auto-renumbering
-- [ ] Implement reorder with undo functionality
+- [x] Implement reorder with undo functionality
 - [x] Add page-break toggle, remark field, and metadata per chapter
-- [ ] Integrate rich text editor (Word-like toolbar, formatting, tables, images, attachments)
-- [ ] Support autosave, discard changes, inline references, cross-links
+- [x] Integrate rich text editor (Word-like toolbar, formatting, tables, images, attachments)
+- [x] Support autosave, discard changes, inline references, cross-links
 
 ## 7. Revision Management & Audit Trail
 - [ ] Persist per-field revision history and change metadata

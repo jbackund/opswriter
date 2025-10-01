@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import RichTextEditor from './RichTextEditor'
 import {
   Save,
   Plus,
@@ -21,7 +22,11 @@ import {
   ArrowLeft,
   Hash,
   Building,
-  X
+  X,
+  MoveUp,
+  MoveDown,
+  Undo2,
+  Redo2
 } from 'lucide-react'
 
 interface Chapter {
@@ -83,6 +88,16 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
   const [success, setSuccess] = useState<string | null>(null)
   const [showMetadataModal, setShowMetadataModal] = useState(false)
 
+  // Undo/Redo state
+  const [chaptersHistory, setChaptersHistory] = useState<Chapter[][]>([initialManual.chapters || []])
+  const [historyIndex, setHistoryIndex] = useState(0)
+  const [reorderMode, setReorderMode] = useState(false)
+
+  // Autosave state
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null)
+
   // Load chapter 0 by default
   useEffect(() => {
     const chapter0 = chapters.find(ch => ch.chapter_number === 0)
@@ -93,6 +108,41 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
       setPageBreakBefore(chapter0.page_break)
     }
   }, [chapters])
+
+  // Autosave effect
+  useEffect(() => {
+    if (!selectedChapter) return
+
+    // Clear existing timer
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer)
+    }
+
+    // Check if there are changes to save
+    const hasChanges = (
+      chapterTitle !== selectedChapter.heading ||
+      chapterContent !== selectedChapter.content ||
+      pageBreakBefore !== selectedChapter.page_break
+    )
+
+    if (hasChanges) {
+      setHasUnsavedChanges(true)
+
+      // Set new timer for autosave (30 seconds)
+      const timer = setTimeout(() => {
+        saveChapter(true) // Pass true to indicate autosave
+      }, 30000)
+
+      setAutoSaveTimer(timer)
+    }
+
+    // Cleanup
+    return () => {
+      if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer)
+      }
+    }
+  }, [chapterTitle, chapterContent, pageBreakBefore])
 
   // Build chapter tree
   const buildChapterTree = (parentId: string | null = null, level: number = 0): any[] => {
@@ -127,7 +177,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
       chapterContent !== selectedChapter.content ||
       pageBreakBefore !== selectedChapter.page_break
     )) {
-      saveChapter()
+      saveChapter(false) // Not an autosave
     }
 
     setSelectedChapter(chapter)
@@ -135,6 +185,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
     setChapterContent(chapter.content || '')
     setPageBreakBefore(chapter.page_break)
     setEditingChapter(null)
+    setHasUnsavedChanges(false)
   }
 
   // Add new chapter
@@ -186,10 +237,12 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
       if (chapterError) throw chapterError
 
       // Update local state
-      setChapters([...chapters, data])
+      const newChapters = [...chapters, data]
+      setChapters(newChapters)
+      addToHistory(newChapters)
       setSelectedChapter(data)
-      setChapterTitle(data.title)
-      setChapterContent(data.content)
+      setChapterTitle(data.heading)
+      setChapterContent(data.content || '')
       setPageBreakBefore(data.page_break)
       setEditingChapter(data.id)
 
@@ -207,10 +260,12 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
   }
 
   // Save chapter
-  const saveChapter = async () => {
+  const saveChapter = async (isAutoSave = false) => {
     if (!selectedChapter) return
 
-    setSaving(true)
+    if (!isAutoSave) {
+      setSaving(true)
+    }
     setError(null)
 
     try {
@@ -233,11 +288,24 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
           : ch
       ))
       setSelectedChapter({ ...selectedChapter, heading: chapterTitle, content: chapterContent, page_break: pageBreakBefore })
-      setSuccess('Chapter saved successfully')
+
+      // Update save status
+      setLastSaved(new Date())
+      setHasUnsavedChanges(false)
+
+      if (isAutoSave) {
+        setSuccess('Auto-saved')
+        // Clear success message after 3 seconds for autosave
+        setTimeout(() => setSuccess(null), 3000)
+      } else {
+        setSuccess('Chapter saved successfully')
+      }
     } catch (error: any) {
       setError(error.message || 'Failed to save chapter')
     } finally {
-      setSaving(false)
+      if (!isAutoSave) {
+        setSaving(false)
+      }
     }
   }
 
@@ -272,7 +340,9 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
       if (deleteError) throw deleteError
 
       // Update local state
-      setChapters(chapters.filter(ch => ch.id !== chapterId))
+      const newChapters = chapters.filter(ch => ch.id !== chapterId)
+      setChapters(newChapters)
+      addToHistory(newChapters)
 
       // If deleted chapter was selected, select Chapter 0
       if (selectedChapter?.id === chapterId) {
@@ -286,6 +356,157 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
     } catch (error: any) {
       setError(error.message || 'Failed to delete chapter')
     }
+  }
+
+  // Add to history (for undo/redo)
+  const addToHistory = (newChapters: Chapter[]) => {
+    // Remove any future history if we're not at the end
+    const newHistory = chaptersHistory.slice(0, historyIndex + 1)
+    newHistory.push(newChapters)
+    setChaptersHistory(newHistory)
+    setHistoryIndex(newHistory.length - 1)
+  }
+
+  // Undo action
+  const undo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1
+      setHistoryIndex(newIndex)
+      setChapters(chaptersHistory[newIndex])
+      setSuccess('Undo successful')
+    }
+  }
+
+  // Redo action
+  const redo = () => {
+    if (historyIndex < chaptersHistory.length - 1) {
+      const newIndex = historyIndex + 1
+      setHistoryIndex(newIndex)
+      setChapters(chaptersHistory[newIndex])
+      setSuccess('Redo successful')
+    }
+  }
+
+  // Move chapter up in order
+  const moveChapterUp = async (chapterId: string) => {
+    const chapter = chapters.find(ch => ch.id === chapterId)
+    if (!chapter) return
+
+    // Find siblings at the same level
+    const siblings = chapters
+      .filter(ch => ch.parent_id === chapter.parent_id)
+      .sort((a, b) => a.display_order - b.display_order)
+
+    const currentIndex = siblings.findIndex(ch => ch.id === chapterId)
+    if (currentIndex <= 0) return // Can't move up if first
+
+    try {
+      // Swap display_order with previous sibling
+      const prevSibling = siblings[currentIndex - 1]
+      const tempOrder = chapter.display_order
+
+      // Update in database
+      await supabase.from('chapters').update({
+        display_order: prevSibling.display_order,
+        updated_at: new Date().toISOString()
+      }).eq('id', chapter.id)
+
+      await supabase.from('chapters').update({
+        display_order: tempOrder,
+        updated_at: new Date().toISOString()
+      }).eq('id', prevSibling.id)
+
+      // Update local state
+      const newChapters = chapters.map(ch => {
+        if (ch.id === chapter.id) {
+          return { ...ch, display_order: prevSibling.display_order }
+        }
+        if (ch.id === prevSibling.id) {
+          return { ...ch, display_order: tempOrder }
+        }
+        return ch
+      })
+
+      setChapters(newChapters)
+      addToHistory(newChapters)
+      setSuccess('Chapter moved up')
+    } catch (error: any) {
+      setError(error.message || 'Failed to move chapter')
+    }
+  }
+
+  // Move chapter down in order
+  const moveChapterDown = async (chapterId: string) => {
+    const chapter = chapters.find(ch => ch.id === chapterId)
+    if (!chapter) return
+
+    // Find siblings at the same level
+    const siblings = chapters
+      .filter(ch => ch.parent_id === chapter.parent_id)
+      .sort((a, b) => a.display_order - b.display_order)
+
+    const currentIndex = siblings.findIndex(ch => ch.id === chapterId)
+    if (currentIndex >= siblings.length - 1) return // Can't move down if last
+
+    try {
+      // Swap display_order with next sibling
+      const nextSibling = siblings[currentIndex + 1]
+      const tempOrder = chapter.display_order
+
+      // Update in database
+      await supabase.from('chapters').update({
+        display_order: nextSibling.display_order,
+        updated_at: new Date().toISOString()
+      }).eq('id', chapter.id)
+
+      await supabase.from('chapters').update({
+        display_order: tempOrder,
+        updated_at: new Date().toISOString()
+      }).eq('id', nextSibling.id)
+
+      // Update local state
+      const newChapters = chapters.map(ch => {
+        if (ch.id === chapter.id) {
+          return { ...ch, display_order: nextSibling.display_order }
+        }
+        if (ch.id === nextSibling.id) {
+          return { ...ch, display_order: tempOrder }
+        }
+        return ch
+      })
+
+      setChapters(newChapters)
+      addToHistory(newChapters)
+      setSuccess('Chapter moved down')
+    } catch (error: any) {
+      setError(error.message || 'Failed to move chapter')
+    }
+  }
+
+  // Check if can move up
+  const canMoveUp = (chapterId: string) => {
+    const chapter = chapters.find(ch => ch.id === chapterId)
+    if (!chapter || chapter.chapter_number === 0) return false
+
+    const siblings = chapters
+      .filter(ch => ch.parent_id === chapter.parent_id)
+      .sort((a, b) => a.display_order - b.display_order)
+
+    const currentIndex = siblings.findIndex(ch => ch.id === chapterId)
+    return currentIndex > 0
+  }
+
+  // Check if can move down
+  const canMoveDown = (chapterId: string) => {
+    const chapter = chapters.find(ch => ch.id === chapterId)
+    if (!chapter || chapter.chapter_number === 0) return false
+
+    const siblings = chapters
+      .filter(ch => ch.parent_id === chapter.parent_id)
+      .sort((a, b) => a.display_order - b.display_order)
+
+    const currentIndex = siblings.findIndex(ch => ch.id === chapterId)
+    return currentIndex < siblings.length - 1
   }
 
   // Send manual for review
@@ -389,6 +610,32 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
           </div>
 
           <div className="flex items-center space-x-1">
+            {reorderMode && chapter.chapter_number !== 0 && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    moveChapterUp(chapter.id)
+                  }}
+                  className={`p-1 hover:bg-gray-200 rounded ${!canMoveUp(chapter.id) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  title="Move up"
+                  disabled={!canMoveUp(chapter.id)}
+                >
+                  <MoveUp className="h-3 w-3 text-gray-500" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    moveChapterDown(chapter.id)
+                  }}
+                  className={`p-1 hover:bg-gray-200 rounded ${!canMoveDown(chapter.id) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  title="Move down"
+                  disabled={!canMoveDown(chapter.id)}
+                >
+                  <MoveDown className="h-3 w-3 text-gray-500" />
+                </button>
+              </>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -527,7 +774,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
         {/* Chapter navigation sidebar */}
         <div className="w-80 bg-white border-r flex flex-col">
           <div className="p-4 border-b">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-semibold text-gray-900">Chapters</h2>
               <button
                 onClick={() => addChapter(null)}
@@ -536,6 +783,38 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
               >
                 <Plus className="h-4 w-4 text-gray-600" />
               </button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setReorderMode(!reorderMode)}
+                className={`px-3 py-1 text-xs font-medium rounded-md ${
+                  reorderMode
+                    ? 'bg-docgen-blue text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                {reorderMode ? 'Done Reordering' : 'Reorder Chapters'}
+              </button>
+              {reorderMode && (
+                <>
+                  <button
+                    onClick={undo}
+                    disabled={historyIndex === 0}
+                    className="p-1.5 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Undo"
+                  >
+                    <Undo2 className="h-4 w-4 text-gray-600" />
+                  </button>
+                  <button
+                    onClick={redo}
+                    disabled={historyIndex === chaptersHistory.length - 1}
+                    className="p-1.5 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Redo"
+                  >
+                    <Redo2 className="h-4 w-4 text-gray-600" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-2">
@@ -553,6 +832,17 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
                     <h2 className="text-lg font-semibold text-gray-900">
                       Chapter {selectedChapter.chapter_number}: {selectedChapter.heading}
                     </h2>
+                    <div className="flex items-center mt-1 text-xs text-gray-500">
+                      {hasUnsavedChanges && (
+                        <span className="text-yellow-600 font-medium">Unsaved changes</span>
+                      )}
+                      {!hasUnsavedChanges && lastSaved && (
+                        <span className="text-green-600">
+                          Last saved {lastSaved.toLocaleTimeString()}
+                        </span>
+                      )}
+                      <span className="ml-2">• Auto-saves every 30 seconds</span>
+                    </div>
                   </div>
                   <div className="flex items-center space-x-4">
                     <label className="flex items-center">
@@ -565,8 +855,8 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
                       <span className="ml-2 text-sm text-gray-600">Page break before</span>
                     </label>
                     <button
-                      onClick={saveChapter}
-                      disabled={saving}
+                      onClick={() => saveChapter(false)}
+                      disabled={saving || !hasUnsavedChanges}
                       className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-docgen-blue hover:opacity-90 disabled:opacity-50"
                     >
                       {saving ? (
@@ -577,7 +867,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
                       ) : (
                         <>
                           <Save className="h-4 w-4 mr-1" />
-                          Save Chapter
+                          Save Now
                         </>
                       )}
                     </button>
@@ -589,15 +879,14 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Chapter Content
                   </label>
-                  <textarea
-                    value={chapterContent}
-                    onChange={(e) => setChapterContent(e.target.value)}
-                    className="w-full h-96 p-4 border border-gray-300 rounded-md focus:ring-docgen-blue focus:border-docgen-blue"
+                  <RichTextEditor
+                    content={chapterContent}
+                    onChange={setChapterContent}
                     placeholder="Enter chapter content..."
                   />
-                  <p className="mt-2 text-sm text-gray-500">
-                    Rich text editor coming soon. For now, use plain text or markdown formatting.
-                  </p>
+                  <div className="mt-4 flex items-center text-sm text-gray-500">
+                    <span>Use the toolbar above to format your content. Tables, images, and links are supported.</span>
+                  </div>
                 </div>
               </div>
             </>
