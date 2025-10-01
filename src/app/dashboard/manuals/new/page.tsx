@@ -3,15 +3,16 @@ import { createClient } from '@/lib/supabase/server'
 import ManualForm from '@/components/ManualForm'
 
 interface PageProps {
-  searchParams?: {
+  searchParams?: Promise<{
     clone?: string
     title?: string
     code?: string
-  }
+  }>
 }
 
 export default async function NewManualPage({ searchParams }: PageProps) {
   const supabase = await createClient()
+  const params = await searchParams
 
   const {
     data: { user },
@@ -31,11 +32,11 @@ export default async function NewManualPage({ searchParams }: PageProps) {
   // If cloning, get the source manual and its chapters
   let sourceManual = null
   let sourceChapters = null
-  if (searchParams?.clone) {
+  if (params?.clone) {
     const { data: manual } = await supabase
       .from('manuals')
       .select('*')
-      .eq('id', searchParams.clone)
+      .eq('id', params.clone)
       .single()
 
     if (manual) {
@@ -71,8 +72,8 @@ export default async function NewManualPage({ searchParams }: PageProps) {
           userProfile={userProfile}
           sourceManual={sourceManual}
           sourceChapters={sourceChapters}
-          cloneTitle={searchParams?.title}
-          cloneCode={searchParams?.code}
+          cloneTitle={params?.title}
+          cloneCode={params?.code}
         />
       </div>
     </div>

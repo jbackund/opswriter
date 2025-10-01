@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -17,7 +17,8 @@ import {
   User,
   AlertCircle,
   Loader2,
-  X
+  X,
+  CheckCircle2
 } from 'lucide-react'
 
 interface UserProfile {
@@ -31,11 +32,15 @@ interface Chapter {
   id: string
   manual_id: string
   parent_id: string | null
-  chapter_number: string
-  title: string
-  content: string
-  page_break_before: boolean
+  chapter_number: number
+  section_number: number | null
+  subsection_number: number | null
+  heading: string
+  content?: string
+  page_break: boolean
   display_order: number
+  depth: number
+  is_mandatory: boolean
 }
 
 interface Manual {
@@ -85,6 +90,82 @@ export default function ManualForm({
   const [effectiveDate, setEffectiveDate] = useState('')
   const [coverLogoUrl, setCoverLogoUrl] = useState(sourceManual?.cover_logo_url || '')
   const [uploadingLogo, setUploadingLogo] = useState(false)
+
+  // Manual code validation state
+  const [checkingCode, setCheckingCode] = useState(false)
+  const [codeAvailable, setCodeAvailable] = useState<boolean | null>(null)
+  const [suggestedCodes, setSuggestedCodes] = useState<string[]>([])
+
+  // Check manual code availability when it changes
+  useEffect(() => {
+    const checkCodeAvailability = async () => {
+      if (!manualCode.trim()) {
+        setCodeAvailable(null)
+        setSuggestedCodes([])
+        return
+      }
+
+      setCheckingCode(true)
+
+      try {
+        const { data, error } = await supabase
+          .from('manuals')
+          .select('manual_code')
+          .eq('manual_code', manualCode.trim().toUpperCase())
+          .maybeSingle()
+
+        if (error) throw error
+
+        const isAvailable = !data
+        setCodeAvailable(isAvailable)
+
+        // If not available, generate suggestions
+        if (!isAvailable) {
+          const suggestions: string[] = []
+          const parts = manualCode.split('-')
+
+          if (parts.length >= 2) {
+            const prefix = parts[0]
+            // Try to find the next available number
+            const { data: lastManual } = await supabase
+              .from('manuals')
+              .select('manual_code')
+              .like('manual_code', `${prefix}-%`)
+              .order('created_at', { ascending: false })
+              .limit(1)
+
+            if (lastManual && lastManual.length > 0) {
+              const lastCode = lastManual[0].manual_code
+              const lastParts = lastCode.split('-')
+              const lastNumber = parseInt(lastParts[lastParts.length - 1] || '0')
+              const nextNumber = lastNumber + 1
+              suggestions.push(`${prefix}-${nextNumber.toString().padStart(3, '0')}`)
+            } else {
+              suggestions.push(`${prefix}-001`)
+            }
+          }
+
+          // Add alternative suggestions
+          suggestions.push(`${manualCode}-V2`)
+          const timestamp = Date.now().toString().slice(-4)
+          suggestions.push(`${manualCode}-${timestamp}`)
+
+          setSuggestedCodes(suggestions.slice(0, 3))
+        } else {
+          setSuggestedCodes([])
+        }
+      } catch (error) {
+        console.error('Error checking manual code:', error)
+        setCodeAvailable(null)
+      } finally {
+        setCheckingCode(false)
+      }
+    }
+
+    // Debounce the check
+    const timeoutId = setTimeout(checkCodeAvailability, 500)
+    return () => clearTimeout(timeoutId)
+  }, [manualCode, supabase])
 
   // Handle tag addition
   const addTag = () => {
@@ -167,6 +248,11 @@ export default function ManualForm({
       return
     }
 
+    if (codeAvailable === false) {
+      setError('This manual code is already in use. Please choose a different code.')
+      return
+    }
+
     if (!organizationName.trim()) {
       setError('Organization name is required')
       return
@@ -222,10 +308,14 @@ export default function ManualForm({
               manual_id: manual.id,
               parent_id: newParentId,
               chapter_number: sourceChapter.chapter_number,
-              title: sourceChapter.title,
+              section_number: sourceChapter.section_number,
+              subsection_number: sourceChapter.subsection_number,
+              heading: sourceChapter.heading,
               content: '', // Don't copy content
-              page_break_before: sourceChapter.page_break_before,
+              page_break: sourceChapter.page_break,
               display_order: sourceChapter.display_order,
+              depth: sourceChapter.depth,
+              is_mandatory: sourceChapter.is_mandatory,
               created_by: userProfile?.id
             })
             .select()
@@ -243,11 +333,15 @@ export default function ManualForm({
           .insert({
             manual_id: manual.id,
             parent_id: null,
-            chapter_number: '0',
-            title: 'Introduction',
+            chapter_number: 0,
+            section_number: null,
+            subsection_number: null,
+            heading: 'Introduction',
             content: '',
-            page_break_before: false,
+            page_break: false,
             display_order: 0,
+            depth: 0,
+            is_mandatory: true,
             created_by: userProfile?.id
           })
 
@@ -271,7 +365,13 @@ export default function ManualForm({
       // Redirect to edit page
       router.push(`/dashboard/manuals/${manual.id}/edit`)
     } catch (error: any) {
-      setError(error.message || 'Failed to create manual')
+      // Check for duplicate key violation
+      if (error.message?.includes('duplicate key') || error.message?.includes('manuals_manual_code_key')) {
+        setError(`The manual code "${manualCode}" is already in use. Please choose a different code.`)
+        setCodeAvailable(false)
+      } else {
+        setError(error.message || 'Failed to create manual')
+      }
       setLoading(false)
     }
   }
@@ -349,12 +449,54 @@ export default function ManualForm({
                 type="text"
                 id="manual-code"
                 value={manualCode}
-                onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-docgen-blue focus:border-docgen-blue sm:text-sm"
+                onChange={(e) => {
+                  setManualCode(e.target.value.toUpperCase())
+                  setError(null)
+                }}
+                className={`block w-full pl-10 pr-10 py-2 border rounded-md focus:ring-docgen-blue focus:border-docgen-blue sm:text-sm ${
+                  codeAvailable === false
+                    ? 'border-red-300 text-red-900 focus:ring-red-500 focus:border-red-500'
+                    : codeAvailable === true
+                    ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
+                    : 'border-gray-300'
+                }`}
                 placeholder="e.g., HOM-001"
                 required
               />
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                {checkingCode ? (
+                  <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
+                ) : codeAvailable === true ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                ) : codeAvailable === false ? (
+                  <AlertCircle className="h-5 w-5 text-red-500" />
+                ) : null}
+              </div>
             </div>
+            {codeAvailable === false && suggestedCodes.length > 0 && (
+              <div className="mt-2">
+                <p className="text-sm text-red-600 mb-1">
+                  This code is already in use. Try one of these:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedCodes.map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => setManualCode(code)}
+                      className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 hover:bg-blue-200"
+                    >
+                      {code}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {codeAvailable === true && (
+              <p className="mt-1 text-sm text-green-600">
+                This code is available!
+              </p>
+            )}
           </div>
 
           {/* Reference Number */}

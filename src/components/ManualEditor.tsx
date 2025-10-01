@@ -28,11 +28,15 @@ interface Chapter {
   id: string
   manual_id: string
   parent_id: string | null
-  chapter_number: string
-  title: string
-  content: string
-  page_break_before: boolean
+  chapter_number: number
+  section_number: number | null
+  subsection_number: number | null
+  heading: string
+  content?: string
+  page_break: boolean
   display_order: number
+  depth: number
+  is_mandatory: boolean
   created_at: string
   updated_at: string
 }
@@ -81,12 +85,12 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
 
   // Load chapter 0 by default
   useEffect(() => {
-    const chapter0 = chapters.find(ch => ch.chapter_number === '0')
+    const chapter0 = chapters.find(ch => ch.chapter_number === 0)
     if (chapter0 && !selectedChapter) {
       setSelectedChapter(chapter0)
-      setChapterTitle(chapter0.title)
-      setChapterContent(chapter0.content)
-      setPageBreakBefore(chapter0.page_break_before)
+      setChapterTitle(chapter0.heading)
+      setChapterContent(chapter0.content || '')
+      setPageBreakBefore(chapter0.page_break)
     }
   }, [chapters])
 
@@ -119,30 +123,45 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
   const selectChapter = (chapter: Chapter) => {
     // Save current chapter if changed
     if (selectedChapter && (
-      chapterTitle !== selectedChapter.title ||
+      chapterTitle !== selectedChapter.heading ||
       chapterContent !== selectedChapter.content ||
-      pageBreakBefore !== selectedChapter.page_break_before
+      pageBreakBefore !== selectedChapter.page_break
     )) {
       saveChapter()
     }
 
     setSelectedChapter(chapter)
-    setChapterTitle(chapter.title)
-    setChapterContent(chapter.content)
-    setPageBreakBefore(chapter.page_break_before)
+    setChapterTitle(chapter.heading)
+    setChapterContent(chapter.content || '')
+    setPageBreakBefore(chapter.page_break)
     setEditingChapter(null)
   }
 
   // Add new chapter
   const addChapter = async (parentId: string | null = null) => {
     try {
-      // Calculate chapter number
+      // Calculate chapter number and depth
       const siblings = chapters.filter(ch => ch.parent_id === parentId)
       const nextNumber = siblings.length + 1
       const parentChapter = parentId ? chapters.find(ch => ch.id === parentId) : null
-      const chapterNumber = parentChapter
-        ? `${parentChapter.chapter_number}.${nextNumber}`
-        : nextNumber.toString()
+
+      // Determine the numbering based on depth
+      let chapterNum = nextNumber
+      let sectionNum = null
+      let subsectionNum = null
+      let depth = 0
+
+      if (parentChapter) {
+        depth = parentChapter.depth + 1
+        if (depth === 1) {
+          chapterNum = parentChapter.chapter_number
+          sectionNum = nextNumber
+        } else if (depth === 2) {
+          chapterNum = parentChapter.chapter_number
+          sectionNum = parentChapter.section_number
+          subsectionNum = nextNumber
+        }
+      }
 
       // Create new chapter
       const { data, error: chapterError } = await supabase
@@ -150,11 +169,15 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
         .insert({
           manual_id: manual.id,
           parent_id: parentId,
-          chapter_number: chapterNumber,
-          title: 'New Chapter',
+          chapter_number: chapterNum,
+          section_number: sectionNum,
+          subsection_number: subsectionNum,
+          heading: 'New Chapter',
           content: '',
-          page_break_before: false,
+          page_break: false,
           display_order: siblings.length,
+          depth: depth,
+          is_mandatory: false,
           created_by: userId
         })
         .select()
@@ -167,7 +190,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
       setSelectedChapter(data)
       setChapterTitle(data.title)
       setChapterContent(data.content)
-      setPageBreakBefore(data.page_break_before)
+      setPageBreakBefore(data.page_break)
       setEditingChapter(data.id)
 
       // Expand parent if adding subchapter
@@ -194,9 +217,9 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
       const { error: updateError } = await supabase
         .from('chapters')
         .update({
-          title: chapterTitle,
+          heading: chapterTitle,
           content: chapterContent,
-          page_break_before: pageBreakBefore,
+          page_break: pageBreakBefore,
           updated_at: new Date().toISOString()
         })
         .eq('id', selectedChapter.id)
@@ -206,10 +229,10 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
       // Update local state
       setChapters(chapters.map(ch =>
         ch.id === selectedChapter.id
-          ? { ...ch, title: chapterTitle, content: chapterContent, page_break_before: pageBreakBefore }
+          ? { ...ch, heading: chapterTitle, content: chapterContent, page_break: pageBreakBefore }
           : ch
       ))
-      setSelectedChapter({ ...selectedChapter, title: chapterTitle, content: chapterContent, page_break_before: pageBreakBefore })
+      setSelectedChapter({ ...selectedChapter, heading: chapterTitle, content: chapterContent, page_break: pageBreakBefore })
       setSuccess('Chapter saved successfully')
     } catch (error: any) {
       setError(error.message || 'Failed to save chapter')
@@ -224,7 +247,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
     if (!chapterToDelete) return
 
     // Don't allow deleting Chapter 0
-    if (chapterToDelete.chapter_number === '0') {
+    if (chapterToDelete.chapter_number === 0) {
       setError('Chapter 0 cannot be deleted')
       return
     }
@@ -236,7 +259,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
       return
     }
 
-    if (!confirm(`Are you sure you want to delete "${chapterToDelete.title}"?`)) {
+    if (!confirm(`Are you sure you want to delete "${chapterToDelete.heading}"?`)) {
       return
     }
 
@@ -361,7 +384,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              <span className="flex-1 text-sm">{chapter.title}</span>
+              <span className="flex-1 text-sm">{chapter.heading}</span>
             )}
           </div>
 
@@ -370,7 +393,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
               onClick={(e) => {
                 e.stopPropagation()
                 setEditingChapter(chapter.id)
-                setChapterTitle(chapter.title)
+                setChapterTitle(chapter.heading)
               }}
               className="p-1 hover:bg-gray-200 rounded"
               title="Rename"
@@ -387,7 +410,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
             >
               <Plus className="h-3 w-3 text-gray-500" />
             </button>
-            {chapter.chapter_number !== '0' && (
+            {chapter.chapter_number !== 0 && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -528,7 +551,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900">
-                      Chapter {selectedChapter.chapter_number}: {selectedChapter.title}
+                      Chapter {selectedChapter.chapter_number}: {selectedChapter.heading}
                     </h2>
                   </div>
                   <div className="flex items-center space-x-4">

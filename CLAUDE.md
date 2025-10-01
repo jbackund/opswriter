@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ CRITICAL RULE: Database Operations
+
+**ALL database operations (migrations, SQL, schema changes) MUST be delegated to the `database-agent`**
+- Use: `Task` tool with `subagent_type: "database-agent"`
+- NEVER attempt direct SQL execution or migrations
+- The database-agent has special permissions to bypass read-only restrictions
+
 ## Project Overview
 
 OpsWriter is a web application for creating, managing, and distributing operational manuals with full revision traceability for regulated organizations. It's designed to be built as a Next.js application hosted on Vercel with Supabase as the backend.
@@ -80,20 +87,54 @@ npm run build
 npm run start
 ```
 
-### Supabase Setup
+### Supabase Setup & Database Migrations
+
+**CRITICAL DATABASE OPERATIONS RULE:**
+**✅ ALWAYS use the `database-agent` for ALL database operations**
+**❌ NEVER attempt to run SQL or migrations directly**
+**The database-agent has specialized tools and permissions that the main assistant lacks.**
+
+**IMPORTANT: Always use Supabase CLI for database migrations and ensure remote is synced with local before making changes.**
+
 ```bash
 # Initialize Supabase locally (if using CLI)
 npx supabase init
 
-# Link to remote project
-npx supabase link --project-ref <project-ref>
+# Link to remote project (use project ref from dashboard)
+npx supabase link --project-ref mjpmvthvroflooywoyss
 
-# Run migrations
+# BEFORE making any migrations, sync remote with local:
+npx supabase db pull  # Pull remote schema changes
+npx supabase migration list --linked  # Check migration status
+
+# Create new migrations (use proper timestamps):
+npx supabase migration new <migration_name>
+# OR create manually: supabase/migrations/[timestamp]_[name].sql
+
+# Apply migrations to remote database:
 npx supabase db push
 
+# If migrations are out of sync, repair them:
+npx supabase migration repair --status applied <migration_version>
+npx supabase migration repair --status reverted <migration_version>
+
 # Generate TypeScript types from schema
-npx supabase gen types typescript --project-id <project-id> > types/supabase.ts
+npx supabase gen types typescript --project-id mjpmvthvroflooywoyss > types/supabase.ts
 ```
+
+#### Database Migration Best Practices:
+1. **Always sync before migrations**: Run `npx supabase db pull` before creating new migrations
+2. **Use proper timestamps**: Format migrations as `YYYYMMDDHHMMSS_description.sql`
+3. **Test locally first**: Use `npx supabase db reset` to test migrations locally if possible
+4. **Handle RLS policies**: Include RLS policies in migrations when creating tables
+5. **Storage buckets**: Create storage buckets and policies via migrations or using the Supabase dashboard SQL editor
+
+#### When Supabase CLI Cannot Apply Migrations:
+If the CLI cannot apply migrations (read-only mode or sync issues), use the Supabase SQL Editor:
+1. Go to: https://supabase.com/dashboard/project/mjpmvthvroflooywoyss/sql/new
+2. Copy and paste the SQL from your migration file
+3. Execute the SQL manually
+4. Update local migration tracking if needed
 
 ### Environment Variables
 Required in `.env.local` and Vercel:
@@ -174,14 +215,45 @@ This project has two MCP (Model Context Protocol) servers configured:
   - Types: `generate_typescript_types`
 - **Important**: Always use `apply_migration` for DDL operations, not `execute_sql`
 
+## CRITICAL: Database Operations Protocol
+
+**🚨 MANDATORY: ALL database operations MUST be delegated to the `database-agent` 🚨**
+
+When you encounter ANY of these situations:
+- Need to add/modify columns or tables
+- Need to run SQL queries or migrations
+- Need to create/modify RLS policies
+- Need to fix database errors
+- Need to check database schema
+
+**IMMEDIATELY use:**
+```
+Task tool with subagent_type: "database-agent"
+```
+
+**DO NOT attempt to:**
+- Use `mcp__supabase__execute_sql` directly
+- Use `mcp__supabase__apply_migration` directly
+- Run SQL through Bash or scripts
+- Modify schema through any other means
+
+The database-agent has specialized permissions and tools that bypass read-only restrictions.
+
 ## Specialized Agents
 
 Use these specialized agents proactively for complex tasks:
 
 ### Database Agent
-- **When to use**: ALWAYS when working with database schema, migrations, SQL queries, or Supabase operations
-- **Capabilities**: Schema optimization, migration management, query performance analysis
-- **Example tasks**: Creating tables, optimizing indexes, analyzing query performance, managing RLS policies
+- **When to use**: **ALWAYS AND IMMEDIATELY** for ANY database operations including:
+  - Creating or modifying database schemas
+  - Running SQL queries or migrations
+  - Adding/removing columns, tables, or indexes
+  - Setting up RLS policies
+  - Executing any DDL or DML operations
+  - Troubleshooting database issues
+- **IMPORTANT**: Never attempt database operations directly - always delegate to database-agent
+- **Capabilities**: Schema optimization, migration management, query performance analysis, DDL/DML execution
+- **Example tasks**: Creating tables, adding columns, applying migrations, managing RLS policies, executing SQL
 
 ### Security Agent
 - **When to use**: ALWAYS when implementing authentication, RLS policies, or reviewing code for vulnerabilities
