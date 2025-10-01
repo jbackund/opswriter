@@ -1,8 +1,22 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, Search, Filter, Edit, Eye, Download, Send, Check, X, ChevronUp, ChevronDown, Copy } from 'lucide-react'
+import {
+  Plus,
+  Search,
+  Filter,
+  Edit,
+  Eye,
+  Download,
+  Send,
+  Check,
+  X,
+  ChevronUp,
+  ChevronDown,
+  Copy,
+  Loader2,
+} from 'lucide-react'
 
 interface UserProfile {
   full_name: string
@@ -24,16 +38,19 @@ interface Manual {
   is_archived: boolean
 }
 
+type ViewerRole = 'manager' | 'sysadmin' | null
+
 interface ManualsListProps {
   initialManuals: Manual[]
+  viewerRole?: ViewerRole
 }
 
 type SortField = 'title' | 'manual_code' | 'current_revision' | 'status' | 'effective_date' | 'created_by_user' | 'updated_at'
 type SortDirection = 'asc' | 'desc'
 type StatusFilter = 'all' | 'draft' | 'in_review' | 'approved' | 'rejected'
 
-export default function ManualsList({ initialManuals }: ManualsListProps) {
-  const [manuals] = useState<Manual[]>(initialManuals)
+export default function ManualsList({ initialManuals, viewerRole = null }: ManualsListProps) {
+  const [manuals, setManuals] = useState<Manual[]>(initialManuals)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [ownerFilter, setOwnerFilter] = useState('all')
@@ -45,6 +62,15 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
   const [selectedManualForClone, setSelectedManualForClone] = useState<Manual | null>(null)
   const [cloneTitle, setCloneTitle] = useState('')
   const [cloneCode, setCloneCode] = useState('')
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!actionFeedback) return
+
+    const timer = setTimeout(() => setActionFeedback(null), 4000)
+    return () => clearTimeout(timer)
+  }, [actionFeedback])
 
   // Get unique owners and tags for filter options
   const uniqueOwners = useMemo(() => {
@@ -177,6 +203,46 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
     }
   }
 
+  const handleSendForReview = async (manual: Manual) => {
+    if (!confirm(`Submit "${manual.title}" for review? Editing will be locked until a decision is made.`)) {
+      return
+    }
+
+    try {
+      setActionLoading(manual.id)
+      setActionFeedback(null)
+
+      const response = await fetch(`/api/manuals/${manual.id}/submit-review`, {
+        method: 'POST',
+      })
+
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to submit manual for review')
+      }
+
+      const revisionNumber = payload?.revision?.revision_number || manual.current_revision
+
+      setManuals(prev =>
+        prev.map(item =>
+          item.id === manual.id
+            ? { ...item, status: 'in_review', current_revision: revisionNumber }
+            : item
+        )
+      )
+
+      setActionFeedback({ type: 'success', message: 'Manual submitted for review.' })
+    } catch (error: any) {
+      setActionFeedback({
+        type: 'error',
+        message: error?.message || 'Failed to submit manual for review',
+      })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const formatDate = (date: string | null) => {
     if (!date) return '-'
     return new Date(date).toLocaleDateString('en-US', {
@@ -202,6 +268,17 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
 
   return (
     <div>
+      {actionFeedback && (
+        <div
+          className={`mb-4 rounded-md border px-4 py-3 text-sm ${
+            actionFeedback.type === 'success'
+              ? 'border-green-200 bg-green-50 text-green-800'
+              : 'border-red-200 bg-red-50 text-red-800'
+          }`}
+        >
+          {actionFeedback.message}
+        </div>
+      )}
       {/* Search and Filter Bar */}
       <div className="mt-6 flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
@@ -418,29 +495,43 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
                                   <Edit className="h-4 w-4" />
                                 </Link>
                                 <button
-                                  className="text-status-green hover:opacity-90"
+                                  onClick={() => handleSendForReview(manual)}
+                                  className={`text-status-green hover:opacity-90 ${actionLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
                                   title="Send in Review"
+                                  disabled={actionLoading === manual.id}
                                 >
-                                  <Send className="h-4 w-4" />
+                                  {actionLoading === manual.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Send className="h-4 w-4" />
+                                  )}
                                 </button>
                               </>
                             )}
                             {manual.status === 'in_review' && (
-                              <button
-                                className="text-status-orange hover:opacity-90"
-                                title="In Review"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </button>
+                              viewerRole === 'sysadmin' ? (
+                                <Link
+                                  href={`/dashboard/manuals/${manual.id}/review`}
+                                  className="text-status-orange hover:opacity-90"
+                                  title="Review Manual"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Link>
+                              ) : (
+                                <span className="text-status-orange" title="In Review">
+                                  <Eye className="h-4 w-4" />
+                                </span>
+                              )
                             )}
                             {manual.status === 'approved' && (
                               <>
-                                <button
+                                <Link
+                                  href={`/dashboard/manuals/${manual.id}/view`}
                                   className="text-status-blue hover:opacity-90"
-                                  title="View"
+                                  title="View Manual"
                                 >
                                   <Eye className="h-4 w-4" />
-                                </button>
+                                </Link>
                                 <button
                                   className="text-gray-600 hover:opacity-90"
                                   title="Export PDF"

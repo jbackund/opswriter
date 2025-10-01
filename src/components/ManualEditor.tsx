@@ -723,34 +723,36 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     setError(null)
 
     try {
-      const { error: updateError } = await supabase
-        .from('manuals')
-        .update({
-          status: 'in_review',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', manual.id)
-
-      if (updateError) throw updateError
-
-      // Log to audit trail
-      await supabase.from('audit_logs').insert({
-        entity_type: 'manual',
-        entity_id: manual.id,
-        action: 'status_change',
-        actor_id: userId,
-        metadata: {
-          from_status: 'draft',
-          to_status: 'in_review',
-          manual_title: manual.title
-        }
+      const response = await fetch(`/api/manuals/${manual.id}/submit-review`, {
+        method: 'POST',
       })
 
-      router.push('/dashboard/manuals')
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to submit manual for review')
+      }
+
+      const nextRevision = payload?.revision?.revision_number || manual.current_revision
+
+      setManual(prev => ({
+        ...prev,
+        status: 'in_review',
+        current_revision: nextRevision,
+      }))
+
+      setSuccess('Manual submitted for review. Redirecting to read-only view...')
+
+      setTimeout(() => {
+        router.push(`/dashboard/manuals/${manual.id}/view`)
+      }, 1000)
     } catch (error: any) {
       setError(error.message || 'Failed to send for review')
       setSaving(false)
+      return
     }
+
+    setSaving(false)
   }
 
   // Render chapter tree item
@@ -936,18 +938,20 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                 <Settings className="h-4 w-4 mr-1" />
                 Metadata
               </button>
-              <button
-                onClick={sendForReview}
-                disabled={saving}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-status-green hover:opacity-90 disabled:opacity-50"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4 mr-1" />
-                )}
-                Send for Review
-              </button>
+              {['draft', 'rejected'].includes(manual.status) && (
+                <button
+                  onClick={sendForReview}
+                  disabled={saving}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-status-green hover:opacity-90 disabled:opacity-50"
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-1" />
+                  )}
+                  Send for Review
+                </button>
+              )}
             </div>
           )}
         </div>
