@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, Search, Filter, Edit, Eye, Download, Send, Check, X, ChevronUp, ChevronDown, ChevronsUpDown, Copy } from 'lucide-react'
+import { Plus, Search, Filter, Edit, Eye, Download, Send, Check, X, ChevronUp, ChevronDown, Copy } from 'lucide-react'
 
 interface UserProfile {
   full_name: string
@@ -188,7 +188,12 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) {
-      return <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+      return (
+        <div className="flex flex-col">
+          <ChevronUp className="h-3 w-3 text-gray-400" />
+          <ChevronDown className="h-3 w-3 text-gray-400 -mt-1" />
+        </div>
+      )
     }
     return sortDirection === 'asc'
       ? <ChevronUp className="h-4 w-4 text-gray-700" />

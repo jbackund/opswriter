@@ -8,7 +8,7 @@ interface PageProps {
   }>
 }
 
-export default async function EditManualPage({ params }: PageProps) {
+export default async function ViewManualPage({ params }: PageProps) {
   const supabase = await createClient()
   const { id } = await params
 
@@ -34,7 +34,7 @@ export default async function EditManualPage({ params }: PageProps) {
     .single()
 
   if (manualError || !manual) {
-    console.error('Failed to load manual for editing', manualError)
+    console.error('Failed to load manual for viewing', manualError)
     notFound()
   }
 
@@ -60,26 +60,20 @@ export default async function EditManualPage({ params }: PageProps) {
       },
   }
 
-  // Check if user has permission to edit
+  // Check if user has permission to view
   const { data: userProfile } = await supabase
     .from('user_profiles')
     .select('role')
     .eq('id', user.id)
     .single()
 
-  // Users can only edit their own manuals unless they're SysAdmin
-  if (manual.created_by !== user.id && userProfile?.role !== 'sysadmin') {
-    redirect('/dashboard/manuals')
-  }
-
-  // Check if manual is editable (draft or rejected status)
-  if (manual.status !== 'draft' && manual.status !== 'rejected') {
-    redirect(`/dashboard/manuals/${id}/view`)
-  }
+  // For now, any authenticated user can view manuals
+  // You can add more specific permission checks here if needed
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <ManualEditor manual={manualWithRelations} userId={user.id} />
+      {/* Pass readOnly prop to ManualEditor for view mode */}
+      <ManualEditor manual={manualWithRelations} userId={user.id} readOnly />
     </div>
   )
 }

@@ -76,9 +76,10 @@ interface Manual {
 interface ManualEditorProps {
   manual: Manual
   userId: string
+  readOnly?: boolean
 }
 
-export default function ManualEditor({ manual: initialManual, userId }: ManualEditorProps) {
+export default function ManualEditor({ manual: initialManual, userId, readOnly = false }: ManualEditorProps) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -185,6 +186,140 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
     setExpandedChapters(newExpanded)
   }
 
+  const getNextSequenceValue = (
+    values: Array<number | null | undefined>,
+    initialValue: number
+  ) => {
+    const numbers = values.filter(
+      (value): value is number => typeof value === 'number'
+    )
+
+    if (numbers.length === 0) {
+      return initialValue
+    }
+
+    return Math.max(...numbers) + 1
+  }
+
+  const normalizeChapterOrdering = async (currentChapters: Chapter[]) => {
+    const rootKey = 'root'
+    const childrenMap = new Map<string, Chapter[]>()
+
+    currentChapters.forEach(chapterItem => {
+      const key = chapterItem.parent_id ?? rootKey
+      if (!childrenMap.has(key)) {
+        childrenMap.set(key, [])
+      }
+      childrenMap.get(key)!.push(chapterItem)
+    })
+
+    for (const [, childList] of childrenMap) {
+      childList.sort((a, b) => a.display_order - b.display_order)
+    }
+
+    const chaptersById = new Map<string, Chapter>(
+      currentChapters.map(chapterItem => [chapterItem.id, { ...chapterItem }])
+    )
+
+    const updatesMap = new Map<string, Partial<Chapter>>()
+
+    const applyUpdate = (id: string, changes: Partial<Chapter>) => {
+      const chapterItem = chaptersById.get(id)
+      if (!chapterItem) return
+
+      const filteredChanges: Partial<Chapter> = {}
+      Object.entries(changes).forEach(([key, value]) => {
+        if ((chapterItem as any)[key] !== value) {
+          ;(filteredChanges as any)[key] = value
+        }
+      })
+
+      if (Object.keys(filteredChanges).length === 0) {
+        return
+      }
+
+      chaptersById.set(id, { ...chapterItem, ...filteredChanges })
+
+      const existing = updatesMap.get(id) ?? {}
+      updatesMap.set(id, { ...existing, ...filteredChanges })
+    }
+
+    const topLevelChapters = [...(childrenMap.get(rootKey) ?? [])]
+    const hasChapterZero = topLevelChapters.some(
+      chapterItem => chapterItem.chapter_number === 0
+    )
+
+    if (hasChapterZero) {
+      const zeroIndex = topLevelChapters.findIndex(
+        chapterItem => chapterItem.chapter_number === 0
+      )
+      if (zeroIndex > 0) {
+        const [chapterZero] = topLevelChapters.splice(zeroIndex, 1)
+        topLevelChapters.unshift(chapterZero)
+      }
+    }
+
+    let nextChapterNumber = hasChapterZero ? 1 : 0
+
+    topLevelChapters.forEach((chapterItem, chapterIndex) => {
+      const isChapterZero = hasChapterZero && chapterItem.chapter_number === 0
+      const assignedChapterNumber = isChapterZero
+        ? 0
+        : nextChapterNumber++
+
+      applyUpdate(chapterItem.id, {
+        chapter_number: assignedChapterNumber,
+        section_number: null,
+        subsection_number: null,
+        display_order: chapterIndex,
+      })
+
+      const sections = childrenMap.get(chapterItem.id) ?? []
+      sections.forEach((section, sectionIndex) => {
+        const sectionNumber = sectionIndex + 1
+
+        applyUpdate(section.id, {
+          chapter_number: assignedChapterNumber,
+          section_number: sectionNumber,
+          subsection_number: null,
+          display_order: sectionIndex,
+        })
+
+        const subsections = childrenMap.get(section.id) ?? []
+        subsections.forEach((subsection, subsectionIndex) => {
+          applyUpdate(subsection.id, {
+            chapter_number: assignedChapterNumber,
+            section_number: sectionNumber,
+            subsection_number: subsectionIndex + 1,
+            display_order: subsectionIndex,
+          })
+        })
+      })
+    })
+
+    const updatesArray = Array.from(updatesMap.entries()).map(
+      ([id, values]) => ({
+        id,
+        ...values,
+        updated_at: new Date().toISOString(),
+      })
+    )
+
+    for (const update of updatesArray) {
+      const { id, updated_at, ...fields } = update
+      const { error: updateError } = await supabase
+        .from('chapters')
+        .update({ ...fields, updated_at })
+        .eq('id', id)
+
+      if (updateError) {
+        throw updateError
+      }
+    }
+
+    return currentChapters.map(chapterItem => chaptersById.get(chapterItem.id)!)
+  }
+
   // Select chapter for editing
   const selectChapter = (chapter: Chapter) => {
     // Save current chapter if changed
@@ -209,25 +344,37 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
     try {
       // Calculate chapter number and depth
       const siblings = chapters.filter(ch => ch.parent_id === parentId)
-      const nextNumber = siblings.length + 1
       const parentChapter = parentId ? chapters.find(ch => ch.id === parentId) : null
 
       // Determine the numbering based on depth
-      let chapterNum = nextNumber
-      let sectionNum = null
-      let subsectionNum = null
       let depth = 0
+      let chapterNum: number
+      let sectionNum: number | null = null
+      let subsectionNum: number | null = null
 
       if (parentChapter) {
         depth = parentChapter.depth + 1
+
         if (depth === 1) {
           chapterNum = parentChapter.chapter_number
-          sectionNum = nextNumber
-        } else if (depth === 2) {
+          sectionNum = getNextSequenceValue(
+            siblings.map(ch => ch.section_number),
+            1
+          )
+        } else {
           chapterNum = parentChapter.chapter_number
           sectionNum = parentChapter.section_number
-          subsectionNum = nextNumber
+          subsectionNum = getNextSequenceValue(
+            siblings.map(ch => ch.subsection_number),
+            1
+          )
         }
+      } else {
+        const fallbackStart = siblings.some(ch => ch.chapter_number === 0) ? 1 : 0
+        chapterNum = getNextSequenceValue(
+          siblings.map(ch => ch.chapter_number),
+          fallbackStart
+        )
       }
 
       // Create new chapter
@@ -453,8 +600,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
         updated_at: new Date().toISOString()
       }).eq('id', prevSibling.id)
 
-      // Update local state
-      const newChapters = chapters.map(ch => {
+      const reorderedChapters = chapters.map(ch => {
         if (ch.id === chapter.id) {
           return { ...ch, display_order: prevSibling.display_order }
         }
@@ -464,8 +610,19 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
         return ch
       })
 
-      setChapters(newChapters)
-      addToHistory(newChapters)
+      const normalizedChapters = await normalizeChapterOrdering(reorderedChapters)
+
+      setChapters(normalizedChapters)
+      addToHistory(normalizedChapters)
+
+      if (selectedChapter) {
+        const updatedSelection = normalizedChapters.find(
+          ch => ch.id === selectedChapter.id
+        )
+        if (updatedSelection) {
+          setSelectedChapter(updatedSelection)
+        }
+      }
       setSuccess('Chapter moved up')
     } catch (error: any) {
       setError(error.message || 'Failed to move chapter')
@@ -501,8 +658,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
         updated_at: new Date().toISOString()
       }).eq('id', nextSibling.id)
 
-      // Update local state
-      const newChapters = chapters.map(ch => {
+      const reorderedChapters = chapters.map(ch => {
         if (ch.id === chapter.id) {
           return { ...ch, display_order: nextSibling.display_order }
         }
@@ -512,8 +668,19 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
         return ch
       })
 
-      setChapters(newChapters)
-      addToHistory(newChapters)
+      const normalizedChapters = await normalizeChapterOrdering(reorderedChapters)
+
+      setChapters(normalizedChapters)
+      addToHistory(normalizedChapters)
+
+      if (selectedChapter) {
+        const updatedSelection = normalizedChapters.find(
+          ch => ch.id === selectedChapter.id
+        )
+        if (updatedSelection) {
+          setSelectedChapter(updatedSelection)
+        }
+      }
       setSuccess('Chapter moved down')
     } catch (error: any) {
       setError(error.message || 'Failed to move chapter')
@@ -760,27 +927,29 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
               </div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setShowMetadataModal(true)}
-              className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-            >
-              <Settings className="h-4 w-4 mr-1" />
-              Metadata
-            </button>
-            <button
-              onClick={sendForReview}
-              disabled={saving}
-              className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-status-green hover:opacity-90 disabled:opacity-50"
-            >
-              {saving ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4 mr-1" />
-              )}
-              Send for Review
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowMetadataModal(true)}
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+              >
+                <Settings className="h-4 w-4 mr-1" />
+                Metadata
+              </button>
+              <button
+                onClick={sendForReview}
+                disabled={saving}
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-status-green hover:opacity-90 disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-1" />
+                )}
+                Send for Review
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -811,6 +980,24 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
             >
               <X className="h-4 w-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Read-only banner */}
+      {readOnly && (
+        <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
+          <div className="flex items-center">
+            <Shield className="h-5 w-5 text-blue-500 mr-2" />
+            <div>
+              <p className="text-sm font-medium text-blue-900">
+                View-Only Mode
+              </p>
+              <p className="text-xs text-blue-700 mt-0.5">
+                This manual is {manual.status === 'approved' ? 'approved' : 'in review'} and cannot be edited.
+                {manual.status === 'approved' && ' To make changes, create a new draft revision.'}
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -971,6 +1158,7 @@ export default function ManualEditor({ manual: initialManual, userId }: ManualEd
                     content={chapterContent}
                     onChange={setChapterContent}
                     placeholder="Enter chapter content..."
+                    readOnly={readOnly}
                   />
                   <div className="mt-4 flex items-center text-sm text-gray-500">
                     <span>Use the toolbar above to format your content. Tables, images, and links are supported.</span>

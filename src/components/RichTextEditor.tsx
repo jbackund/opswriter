@@ -2,15 +2,15 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Table from '@tiptap/extension-table'
-import TableRow from '@tiptap/extension-table-row'
-import TableCell from '@tiptap/extension-table-cell'
-import TableHeader from '@tiptap/extension-table-header'
-import Image from '@tiptap/extension-image'
-import Link from '@tiptap/extension-link'
-import Underline from '@tiptap/extension-underline'
-import TextStyle from '@tiptap/extension-text-style'
-import Color from '@tiptap/extension-color'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { Image } from '@tiptap/extension-image'
+import { Link } from '@tiptap/extension-link'
+import { Underline } from '@tiptap/extension-underline'
+import { TextStyle } from '@tiptap/extension-text-style'
+import { Color } from '@tiptap/extension-color'
 import {
   Bold,
   Italic,
@@ -39,15 +39,18 @@ interface RichTextEditorProps {
   content: string
   onChange: (content: string) => void
   placeholder?: string
+  readOnly?: boolean
 }
 
-export default function RichTextEditor({ content, onChange, placeholder }: RichTextEditorProps) {
+export default function RichTextEditor({ content, onChange, placeholder, readOnly = false }: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         heading: {
           levels: [1, 2, 3],
         },
+        link: false,
+        underline: false,
       }),
       Underline,
       TextStyle,
@@ -68,9 +71,13 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
       }),
     ],
     content,
+    editable: !readOnly,
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML())
+      if (!readOnly) {
+        onChange(editor.getHTML())
+      }
     },
+    immediatelyRender: false,
   })
 
   if (!editor) {

@@ -23,13 +23,7 @@ export async function GET(
     // Get all revisions for this manual, ordered by creation date
     const { data: revisions, error } = await supabase
       .from('revisions')
-      .select(`
-        *,
-        created_by_user:user_profiles!revisions_created_by_fkey(full_name, email),
-        approved_by_user:user_profiles!revisions_approved_by_fkey(full_name, email),
-        rejected_by_user:user_profiles!revisions_rejected_by_fkey(full_name, email),
-        submitted_by_user:user_profiles!revisions_submitted_by_fkey(full_name, email)
-      `)
+      .select('*')
       .eq('manual_id', manualId)
       .order('created_at', { ascending: true })
 
@@ -41,7 +35,57 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ revisions })
+    const revisionList = revisions ?? []
+
+    const userIds = Array.from(
+      new Set(
+        revisionList.flatMap((revision) =>
+          [
+            revision.created_by,
+            revision.approved_by,
+            revision.rejected_by,
+            revision.submitted_by,
+          ].filter((id): id is string => Boolean(id))
+        )
+      )
+    )
+
+    let profilesMap: Record<string, { full_name: string; email: string }> = {}
+
+    if (userIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, email')
+        .in('id', userIds)
+
+      if (profilesError) {
+        console.error('Error fetching revision user profiles:', profilesError)
+      } else if (profiles) {
+        profilesMap = Object.fromEntries(
+          profiles.map((profile) => [profile.id, profile])
+        )
+      }
+    }
+
+    const revisionsWithProfiles = revisionList.map((revision) => {
+      const fallbackProfile = { full_name: 'Unknown', email: '' }
+
+      return {
+        ...revision,
+        created_by_user: profilesMap[revision.created_by] ?? fallbackProfile,
+        approved_by_user: revision.approved_by
+          ? profilesMap[revision.approved_by] ?? fallbackProfile
+          : undefined,
+        rejected_by_user: revision.rejected_by
+          ? profilesMap[revision.rejected_by] ?? fallbackProfile
+          : undefined,
+        submitted_by_user: revision.submitted_by
+          ? profilesMap[revision.submitted_by] ?? fallbackProfile
+          : undefined,
+      }
+    })
+
+    return NextResponse.json({ revisions: revisionsWithProfiles })
   } catch (error) {
     console.error('Error in revisions API:', error)
     return NextResponse.json(
