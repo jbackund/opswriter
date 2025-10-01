@@ -117,6 +117,16 @@ export default function ManualForm({
         throw new Error('Image size must be less than 5MB')
       }
 
+      // Ensure storage buckets are initialized
+      const initResponse = await fetch('/api/storage/init', {
+        method: 'POST'
+      })
+
+      if (!initResponse.ok) {
+        const error = await initResponse.json()
+        throw new Error(error.error || 'Failed to initialize storage')
+      }
+
       // Upload to storage
       const fileExt = file.name.split('.').pop()
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
