@@ -55,12 +55,12 @@
 - [x] Restrict editing when status is `in review` or `approved`
 
 ## 9. Exporting & PDFs
-- [ ] Build PDF generation pipeline (cover page, headers, footers, table of contents)
-- [ ] Assemble required sections: Record of Revision, Chapters Affected, List of Abbreviations, List of Definitions, Change Log Appendix
-- [ ] Implement draft export variants: watermarked, diff (red strikethrough removals, green additions)
-- [ ] Ensure approved exports are clean; in-review exports read-only snapshot
-- [ ] Respect chapter page-break toggle and chapter remarks in PDF tables
-- [ ] Cache and store exports with 30-day retention and access control
+- [x] Build PDF generation pipeline (cover page, headers, footers, table of contents)
+- [x] Assemble required sections: Record of Revision, Chapters Affected, List of Abbreviations, List of Definitions, Change Log Appendix
+- [x] Implement draft export variants: watermarked, diff (red strikethrough removals, green additions)
+- [x] Ensure approved exports are clean; in-review exports read-only snapshot
+- [x] Respect chapter page-break toggle and chapter remarks in PDF tables
+- [x] Cache and store exports with 30-day retention and access control
 
 ## 10. Reference Management
 - [ ] Create sidebar reference pages for definitions and abbreviations CRUD

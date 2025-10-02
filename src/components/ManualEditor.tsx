@@ -9,6 +9,7 @@ import RevisionViewer from './RevisionViewer'
 import DiffViewer from './DiffViewer'
 import RestoreModal from './RestoreModal'
 import AuditTrail from './AuditTrail'
+import ExportButton from './ExportButton'
 import {
   Save,
   Plus,
@@ -982,31 +983,41 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
               </div>
             </div>
           </div>
-          {!isReadOnly && (
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setShowMetadataModal(true)}
-                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <Settings className="h-4 w-4 mr-1" />
-                Metadata
-              </button>
-              {['draft', 'rejected'].includes(normalizedManualStatus) && (
+          <div className="flex items-center space-x-2">
+            {/* Export button - available for all statuses */}
+            <ExportButton
+              manualId={manual.id}
+              manualStatus={normalizedManualStatus}
+              manualCode={manual.manual_code}
+              currentRevision={manual.current_revision}
+            />
+
+            {!isReadOnly && (
+              <>
                 <button
-                  onClick={sendForReview}
-                  disabled={saving}
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-status-green hover:opacity-90 disabled:opacity-50"
+                  onClick={() => setShowMetadataModal(true)}
+                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
                 >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4 mr-1" />
-                  )}
-                  Send for Review
+                  <Settings className="h-4 w-4 mr-1" />
+                  Metadata
                 </button>
-              )}
-            </div>
-          )}
+                {['draft', 'rejected'].includes(normalizedManualStatus) && (
+                  <button
+                    onClick={sendForReview}
+                    disabled={saving}
+                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-status-green hover:opacity-90 disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-1" />
+                    )}
+                    Send for Review
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
