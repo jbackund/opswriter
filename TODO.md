@@ -49,10 +49,10 @@
 - [x] Log all CRUD operations to audit trail with actor, timestamps, before/after snapshots
 
 ## 8. Review Workflow
-- [ ] Implement `Send in review` action generating immutable snapshot and freezing edits
-- [ ] Build approval screen for authority decision (accept/reject with comment)
-- [ ] Handle rejection path reverting to draft; acceptance path prompting for effective date and auto-incrementing revision
-- [ ] Restrict editing when status is `in review` or `approved`
+- [x] Implement `Send in review` action generating immutable snapshot and freezing edits
+- [x] Build approval screen for authority decision (accept/reject with comment)
+- [x] Handle rejection path reverting to draft; acceptance path prompting for effective date and auto-incrementing revision
+- [x] Restrict editing when status is `in review` or `approved`
 
 ## 9. Exporting & PDFs
 - [ ] Build PDF generation pipeline (cover page, headers, footers, table of contents)

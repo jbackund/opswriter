@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 // GET /api/manuals/[id]/revisions - List all revisions for a manual
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -18,7 +18,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const manualId = params.id
+    const { id } = await params
+    const manualId = id
 
     // Get all revisions for this manual, ordered by creation date
     const { data: revisions, error } = await supabase
@@ -98,7 +99,7 @@ export async function GET(
 // POST /api/manuals/[id]/revisions - Create a new revision snapshot
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -112,7 +113,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const manualId = params.id
+    const { id } = await params
+    const manualId = id
     const body = await request.json()
     const { changes_summary, chapters_affected } = body
 

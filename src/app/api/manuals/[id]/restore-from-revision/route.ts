@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 // POST /api/manuals/[id]/restore-from-revision - Restore manual from historical revision
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -18,7 +18,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const manualId = params.id
+    const { id } = await params
+    const manualId = id
     const body = await request.json()
     const { revision_id } = body
 

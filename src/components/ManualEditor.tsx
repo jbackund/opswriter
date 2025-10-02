@@ -219,6 +219,24 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     return Math.max(...numbers) + 1
   }
 
+  const getDisplayNumber = (chapter: Chapter) => {
+    const parts: Array<number> = []
+
+    if (typeof chapter.chapter_number === 'number') {
+      parts.push(chapter.chapter_number)
+    }
+
+    if (typeof chapter.section_number === 'number') {
+      parts.push(chapter.section_number)
+    }
+
+    if (typeof chapter.subsection_number === 'number') {
+      parts.push(chapter.subsection_number)
+    }
+
+    return parts.join('.') || chapter.chapter_number.toString()
+  }
+
   const normalizeChapterOrdering = async (currentChapters: Chapter[]) => {
     const rootKey = 'root'
     const childrenMap = new Map<string, Chapter[]>()
@@ -534,7 +552,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
       // If deleted chapter was selected, select Chapter 0
       if (selectedChapter?.id === chapterId) {
-        const chapter0 = chapters.find(ch => ch.chapter_number === '0')
+        const chapter0 = chapters.find(ch => ch.chapter_number === 0)
         if (chapter0) {
           selectChapter(chapter0)
         }
@@ -820,12 +838,12 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
           )}
           {!hasChildren && <div className="w-5" />}
 
-          <div
+         <div
             className="flex-1 flex items-center ml-1"
             onClick={() => selectChapter(chapter)}
           >
             <span className="text-sm font-medium text-gray-500 mr-2">
-              {chapter.chapter_number}
+              {getDisplayNumber(chapter)}
             </span>
             {isEditing ? (
               <input
@@ -1148,7 +1166,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900">
-                      Chapter {selectedChapter.chapter_number}: {selectedChapter.heading}
+                      Chapter {getDisplayNumber(selectedChapter)}: {selectedChapter.heading}
                     </h2>
                     {!isReadOnly ? (
                       <div className="flex items-center mt-1 text-xs text-gray-500">
@@ -1164,7 +1182,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                       </div>
                     ) : (
                       <div className="mt-1 text-xs text-gray-500">
-                        Viewing snapshot of Chapter {selectedChapter.chapter_number}.
+                        Viewing snapshot of Chapter {getDisplayNumber(selectedChapter)}.
                       </div>
                     )}
                   </div>

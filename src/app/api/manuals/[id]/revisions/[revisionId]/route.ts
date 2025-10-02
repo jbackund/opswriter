@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 // GET /api/manuals/[id]/revisions/[revisionId] - Get specific revision snapshot
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string; revisionId: string } }
+  { params }: { params: Promise<{ id: string; revisionId: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -18,7 +18,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: manualId, revisionId } = params
+    const { id: manualId, revisionId } = await params
 
     // Get the specific revision with full details
     const { data: revision, error } = await supabase
