@@ -9,6 +9,7 @@ import RevisionViewer from './RevisionViewer'
 import DiffViewer from './DiffViewer'
 import RestoreModal from './RestoreModal'
 import AuditTrail from './AuditTrail'
+import ActivityFeed from './ActivityFeed'
 import ExportButton from './ExportButton'
 import ManualReferencesSelector from './ManualReferencesSelector'
 import {
@@ -37,7 +38,8 @@ import {
   Redo2,
   History,
   Shield,
-  GitBranch
+  GitBranch,
+  Clock
 } from 'lucide-react'
 
 interface Chapter {
@@ -117,7 +119,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null)
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'audit' | 'references'>('editor')
+  const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'audit' | 'references' | 'activity'>('editor')
 
   // Revision viewing state
   const [viewingRevision, setViewingRevision] = useState<any>(null)
@@ -1176,6 +1178,17 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
             <BookOpen className="h-4 w-4" />
             References
           </button>
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={`py-4 px-1 inline-flex items-center gap-2 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'activity'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Clock className="h-4 w-4" />
+            Activity
+          </button>
         </nav>
       </div>
 
@@ -1364,6 +1377,13 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                 // Optionally refresh something after reference updates
               }}
             />
+          </div>
+        )}
+
+        {/* Activity Tab */}
+        {activeTab === 'activity' && (
+          <div className="flex-1 p-6 overflow-y-auto bg-gray-50">
+            <ActivityFeed manualId={manual.id} limit={50} />
           </div>
         )}
       </div>

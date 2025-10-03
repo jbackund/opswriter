@@ -69,8 +69,8 @@
 - [x] Add search filters for references and inclusion status
 
 ## 11. Notifications & Activity
-- [ ] Wire Resend emails for review requests, approvals, rejections, manual assignments
-- [ ] Build activity feed per manual summarizing recent changes
+- [x] Wire Resend emails for review requests, approvals, rejections, manual assignments
+- [x] Build activity feed per manual summarizing recent changes
 
 ## 12. Search & Discovery
 - [ ] Implement global search across manuals, chapters, definitions, abbreviations with filters

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { sendReviewRequestEmail } from '@/lib/email/service'
 
 export async function POST(
   request: NextRequest,
@@ -140,6 +141,44 @@ export async function POST(
 
   if (auditError) {
     console.error('Error recording audit log for review submission', auditError)
+  }
+
+  // Send review request notification to SysAdmins
+  try {
+    // Get all SysAdmin users to notify them about the review request
+    const { data: sysAdmins } = await supabase
+      .from('user_profiles')
+      .select('id, email, full_name')
+      .eq('role', 'sysadmin')
+
+    if (sysAdmins && sysAdmins.length > 0) {
+      // Get submitter's name
+      const { data: submitterProfile } = await supabase
+        .from('user_profiles')
+        .select('full_name, email')
+        .eq('id', user.id)
+        .single()
+
+      const submitterName = submitterProfile?.full_name || submitterProfile?.email || 'User'
+
+      // Send email to each SysAdmin
+      for (const admin of sysAdmins) {
+        await sendReviewRequestEmail(
+          { to: admin.email },
+          {
+            manualTitle: manual.title,
+            manualRevision: revisionNumber,
+            manualUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard/manuals/${manualId}/review`,
+            recipientName: admin.full_name || 'Reviewer',
+            senderName: submitterName,
+            comment: 'A new manual revision has been submitted for your review.',
+          }
+        )
+      }
+    }
+  } catch (notificationError) {
+    // Log error but don't fail the request
+    console.error('Failed to send review notification:', notificationError)
   }
 
   return NextResponse.json({ revision }, { status: 200 })

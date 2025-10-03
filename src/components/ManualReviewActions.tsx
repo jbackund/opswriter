@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Check, X, Calendar, AlertCircle } from 'lucide-react'
+import { useNotifications } from '@/hooks/useNotifications'
+import { createClient } from '@/lib/supabase/client'
 
 interface ManualReviewActionsProps {
   manualId: string
@@ -12,11 +14,31 @@ interface ManualReviewActionsProps {
 
 export default function ManualReviewActions({ manualId, revisionId, revisionNumber }: ManualReviewActionsProps) {
   const router = useRouter()
+  const { sendApproval, sendRejection } = useNotifications()
   const [effectiveDate, setEffectiveDate] = useState('')
   const [approvalComment, setApprovalComment] = useState('')
   const [rejectionReason, setRejectionReason] = useState('')
   const [submitting, setSubmitting] = useState<'approve' | 'reject' | null>(null)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [manualData, setManualData] = useState<any>(null)
+
+  // Fetch manual data for notifications
+  useEffect(() => {
+    const fetchManualData = async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('manuals')
+        .select('title, owner_id')
+        .eq('id', manualId)
+        .single()
+
+      if (data) {
+        setManualData(data)
+      }
+    }
+
+    fetchManualData()
+  }, [manualId])
 
   const handleApprove = async () => {
     if (!effectiveDate) {
@@ -38,6 +60,18 @@ export default function ManualReviewActions({ manualId, revisionId, revisionNumb
 
       if (!response.ok) {
         throw new Error(payload?.error || 'Failed to approve manual')
+      }
+
+      // Send approval notification to the manual owner
+      if (manualData?.owner_id) {
+        await sendApproval(manualData.owner_id, {
+          manualId,
+          manualTitle: manualData.title,
+          manualRevision: revisionNumber,
+          manualUrl: `${window.location.origin}/dashboard/manuals/${manualId}/view`,
+          comment: approvalComment,
+          effectiveDate,
+        })
       }
 
       setFeedback({ type: 'success', message: 'Manual approved. Redirecting…' })
@@ -75,6 +109,17 @@ export default function ManualReviewActions({ manualId, revisionId, revisionNumb
 
       if (!response.ok) {
         throw new Error(payload?.error || 'Failed to reject manual')
+      }
+
+      // Send rejection notification to the manual owner
+      if (manualData?.owner_id) {
+        await sendRejection(manualData.owner_id, {
+          manualId,
+          manualTitle: manualData.title,
+          manualRevision: revisionNumber,
+          manualUrl: `${window.location.origin}/dashboard/manuals/${manualId}/edit`,
+          rejectionReason,
+        })
       }
 
       setFeedback({ type: 'success', message: 'Manual rejected. Returning to list…' })
