@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit2, Trash2, Save, X, ChevronUp, ChevronDown, Check, AlertCircle } from 'lucide-react'
 
@@ -14,7 +14,7 @@ interface ReferenceCategory {
 }
 
 export default function ReferenceCategoriesSettings() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [categories, setCategories] = useState<ReferenceCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -27,11 +27,8 @@ export default function ReferenceCategoriesSettings() {
   const [showNewForm, setShowNewForm] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  useEffect(() => {
-    loadCategories()
-  }, [])
-
-  async function loadCategories() {
+  const loadCategories = useCallback(async () => {
+    setLoading(true)
     try {
       const { data, error } = await supabase
         .from('reference_categories')
@@ -49,7 +46,11 @@ export default function ReferenceCategoriesSettings() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    loadCategories()
+  }, [loadCategories])
 
   async function createCategory() {
     try {
@@ -177,7 +178,7 @@ export default function ReferenceCategoriesSettings() {
       ])
     } catch (error) {
       console.error('Error reordering categories:', error)
-      loadCategories() // Reload to get correct order
+      await loadCategories() // Reload to get correct order
     }
   }
 

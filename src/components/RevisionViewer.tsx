@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   AlertCircle,
@@ -34,6 +34,7 @@ interface Chapter {
   chapter_number: number
   section_number: number | null
   subsection_number: number | null
+  clause_number: number | null
   heading: string
   page_break: boolean
   display_order: number
@@ -60,11 +61,7 @@ export default function RevisionViewer({
   const [error, setError] = useState<string | null>(null)
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null)
 
-  useEffect(() => {
-    fetchRevision()
-  }, [revisionId, manualId])
-
-  const fetchRevision = async () => {
+  const fetchRevision = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -87,7 +84,11 @@ export default function RevisionViewer({
     } finally {
       setLoading(false)
     }
-  }
+  }, [manualId, revisionId])
+
+  useEffect(() => {
+    fetchRevision()
+  }, [fetchRevision])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -103,6 +104,7 @@ export default function RevisionViewer({
     let num = `${chapter.chapter_number}`
     if (chapter.section_number !== null) num += `.${chapter.section_number}`
     if (chapter.subsection_number !== null) num += `.${chapter.subsection_number}`
+    if (chapter.clause_number !== null) num += `.${chapter.clause_number}`
     return num
   }
 

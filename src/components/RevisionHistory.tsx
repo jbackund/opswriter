@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Clock,
   CheckCircle,
@@ -74,11 +73,7 @@ export default function RevisionHistory({
   const [selectedForCompare, setSelectedForCompare] = useState<Revision | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>('all')
 
-  useEffect(() => {
-    fetchRevisions()
-  }, [manualId])
-
-  const fetchRevisions = async () => {
+  const fetchRevisions = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -96,7 +91,11 @@ export default function RevisionHistory({
     } finally {
       setLoading(false)
     }
-  }
+  }, [manualId])
+
+  useEffect(() => {
+    fetchRevisions()
+  }, [fetchRevisions])
 
   const getStatusBadge = (status: string) => {
     const badges = {

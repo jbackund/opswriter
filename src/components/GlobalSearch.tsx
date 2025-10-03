@@ -353,7 +353,7 @@ export default function GlobalSearch() {
             {/* No Results */}
             {results && getTotalResults() === 0 && query.length >= 2 && (
               <div className="p-8 text-center text-gray-500">
-                No results found for "{query}"
+                No results found for &ldquo;{query}&rdquo;
               </div>
             )}
 

@@ -146,6 +146,7 @@ export type Database = {
           parent_id: string | null
           section_number: number | null
           subsection_number: number | null
+          clause_number: number | null
           updated_at: string
           updated_by: string | null
         }
@@ -164,6 +165,7 @@ export type Database = {
           parent_id?: string | null
           section_number?: number | null
           subsection_number?: number | null
+          clause_number?: number | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -182,6 +184,7 @@ export type Database = {
           parent_id?: string | null
           section_number?: number | null
           subsection_number?: number | null
+          clause_number?: number | null
           updated_at?: string
           updated_by?: string | null
         }

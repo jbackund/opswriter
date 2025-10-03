@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   Shield,
@@ -48,11 +48,7 @@ export default function AuditTrail({ manualId }: AuditTrailProps) {
     end_date: '',
   })
 
-  useEffect(() => {
-    fetchAuditLogs()
-  }, [manualId, page, filters])
-
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogs = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -79,7 +75,11 @@ export default function AuditTrail({ manualId }: AuditTrailProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters, manualId, page])
+
+  useEffect(() => {
+    fetchAuditLogs()
+  }, [fetchAuditLogs])
 
   const handleExportCSV = () => {
     const headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'IP Address', 'User Agent', 'Details']

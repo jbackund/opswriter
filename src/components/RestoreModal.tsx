@@ -136,7 +136,7 @@ export default function RestoreModal({
               <li>Manual metadata will be restored to revision {revision.revision_number}</li>
               <li>All chapters and content will be restored to their historical state</li>
               <li>Current chapters and content will be replaced</li>
-              <li>Manual status will be set to "Draft"</li>
+              <li>Manual status will be set to &ldquo;Draft&rdquo;</li>
               <li>A new revision snapshot will be created for this restore operation</li>
               <li>The action will be logged in the audit trail</li>
             </ul>

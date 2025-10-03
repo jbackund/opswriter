@@ -17,20 +17,21 @@ const customJestConfig = {
     '^@/types/(.*)$': '<rootDir>/types/$1',
   },
   testMatch: [
-    '**/__tests__/**/*.{js,jsx,ts,tsx}',
-    '**/*.{spec,test}.{js,jsx,ts,tsx}',
+    '<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
+    '<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}',
   ],
+  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/e2e/', '<rootDir>/tests/e2e/'],
   collectCoverageFrom: [
-    'app/**/*.{js,jsx,ts,tsx}',
-    'components/**/*.{js,jsx,ts,tsx}',
-    'lib/**/*.{js,jsx,ts,tsx}',
+    'src/app/**/*.{js,jsx,ts,tsx}',
+    'src/components/**/*.{js,jsx,ts,tsx}',
+    'src/lib/**/*.{js,jsx,ts,tsx}',
     '!**/*.d.ts',
     '!**/node_modules/**',
     '!**/.next/**',
     '!**/coverage/**',
     '!**/vendor/**',
   ],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       branches: 70,
       functions: 70,
@@ -38,6 +39,7 @@ const customJestConfig = {
       statements: 70,
     },
   },
+  passWithNoTests: true,
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

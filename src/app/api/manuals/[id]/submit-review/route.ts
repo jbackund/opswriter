@@ -91,9 +91,13 @@ export async function POST(
       status: 'in_review',
       snapshot: revisionSnapshot,
       changes_summary: 'Submitted for review',
-      chapters_affected: manual.chapters?.map((ch: any) =>
-        ch.chapter_number?.toString()
-      ) ?? [],
+      chapters_affected: manual.chapters?.map((ch: any) => {
+        const parts = [ch.chapter_number]
+        if (ch.section_number !== null && ch.section_number !== undefined) parts.push(ch.section_number)
+        if (ch.subsection_number !== null && ch.subsection_number !== undefined) parts.push(ch.subsection_number)
+        if (ch.clause_number !== null && ch.clause_number !== undefined) parts.push(ch.clause_number)
+        return parts.join('.')
+      }) ?? [],
       submitted_for_review_at: new Date().toISOString(),
       submitted_by: user.id,
       created_by: user.id,

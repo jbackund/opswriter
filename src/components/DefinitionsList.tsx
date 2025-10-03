@@ -645,7 +645,7 @@ export default function DefinitionsList({ initialDefinitions }: DefinitionsListP
             </div>
 
             <p className="text-gray-600 mb-4">
-              Are you sure you want to delete the definition for "<strong>{selectedDefinition.term}</strong>"?
+              Are you sure you want to delete the definition for &ldquo;<strong>{selectedDefinition.term}</strong>&rdquo;?
               This action cannot be undone.
             </p>
 

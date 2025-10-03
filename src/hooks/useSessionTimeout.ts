@@ -11,25 +11,20 @@ const SESSION_TIMEOUT = session.timeoutMinutes * 60 * 1000
 export function useSessionTimeout() {
   const router = useRouter()
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const supabase = createClient()
+  useEffect(() => {
+    const supabaseClient = createClient()
 
-  const resetTimeout = () => {
-    // Clear existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
+    const resetTimeout = () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+
+      timeoutRef.current = setTimeout(async () => {
+        await supabaseClient.auth.signOut()
+        router.push('/login?message=Session expired due to inactivity')
+      }, SESSION_TIMEOUT)
     }
 
-    // Set new timeout
-    timeoutRef.current = setTimeout(async () => {
-      // Sign out the user
-      await supabase.auth.signOut()
-
-      // Redirect to login with timeout message
-      router.push('/login?message=Session expired due to inactivity')
-    }, SESSION_TIMEOUT)
-  }
-
-  useEffect(() => {
     // Events that should reset the timeout
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
 
@@ -55,5 +50,5 @@ export function useSessionTimeout() {
         document.removeEventListener(event, handleActivity)
       })
     }
-  }, [])
+  }, [router])
 }

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Shield, Clock, User, FileText, AlertCircle, Check, Lock, Activity } from 'lucide-react'
+import { Shield, Clock, User, AlertCircle, Check, Lock, Activity, Plus, Edit2, Trash2 } from 'lucide-react'
 
 interface AuditLog {
   id: string
@@ -21,7 +21,7 @@ interface SecuritySettingsProps {
 }
 
 export default function SecuritySettings({ userRole }: SecuritySettingsProps) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [sessionInfo, setSessionInfo] = useState<any>(null)
@@ -33,11 +33,8 @@ export default function SecuritySettings({ userRole }: SecuritySettingsProps) {
     encryption: true,
   })
 
-  useEffect(() => {
-    loadSecurityInfo()
-  }, [])
-
-  async function loadSecurityInfo() {
+  const loadSecurityInfo = useCallback(async () => {
+    setLoading(true)
     try {
       // Load session info
       const { data: { session } } = await supabase.auth.getSession()
@@ -64,7 +61,11 @@ export default function SecuritySettings({ userRole }: SecuritySettingsProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    loadSecurityInfo()
+  }, [loadSecurityInfo])
 
   function formatDate(date: string) {
     return new Date(date).toLocaleString('en-US', {

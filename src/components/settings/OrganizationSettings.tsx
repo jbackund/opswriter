@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import NextImage from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Save, Upload, AlertCircle, Check } from 'lucide-react'
 
@@ -16,7 +17,7 @@ interface OrganizationSettingsData {
 }
 
 export default function OrganizationSettings() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [settings, setSettings] = useState<OrganizationSettingsData>({
     organization_name: '',
     logo_url: null,
@@ -30,11 +31,8 @@ export default function OrganizationSettings() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  useEffect(() => {
-    loadSettings()
-  }, [])
-
-  async function loadSettings() {
+  const loadSettings = useCallback(async () => {
+    setLoading(true)
     try {
       const { data, error } = await supabase
         .from('organization_settings')
@@ -58,7 +56,11 @@ export default function OrganizationSettings() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
 
   async function saveSettings() {
     setSaving(true)
@@ -190,10 +192,13 @@ export default function OrganizationSettings() {
         </label>
         <div className="flex items-center gap-4">
           {settings.logo_url && (
-            <img
+            <NextImage
               src={settings.logo_url}
               alt="Organization logo"
+              width={128}
+              height={64}
               className="h-16 w-auto object-contain"
+              unoptimized
             />
           )}
           <label className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">

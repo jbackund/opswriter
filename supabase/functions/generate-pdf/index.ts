@@ -21,15 +21,38 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return new Response(
+      JSON.stringify({ error: 'Supabase environment variables are not configured' }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+  let payload: PDFJobPayload
   try {
-    const payload: PDFJobPayload = await req.json()
-    const { jobId, manualId, exportType, includeWatermark, userId } = payload
+    payload = await req.json()
+  } catch (error) {
+    console.error('Invalid request payload:', error)
+    return new Response(
+      JSON.stringify({ error: 'Invalid request body' }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
+  }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const { jobId, manualId, exportType, includeWatermark, userId } = payload
 
+  try {
     // Update job status to processing
     await supabase
       .from('export_jobs')
@@ -187,21 +210,21 @@ serve(async (req) => {
   } catch (error) {
     console.error('PDF generation error:', error)
 
-    // Update job status to failed
-    const payload = await req.json()
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
     await supabase
       .from('export_jobs')
       .update({
         status: 'failed',
-        error_message: error.message,
-        processing_completed_at: new Date().toISOString(),  // Changed from completed_at to processing_completed_at
+        error_message: errorMessage,
+        processing_completed_at: new Date().toISOString(),
       })
-      .eq('id', payload.jobId)
+      .eq('id', jobId)
 
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message,
+        error: errorMessage,
       }),
       {
         status: 500,

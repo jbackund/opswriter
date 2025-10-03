@@ -75,9 +75,10 @@ CREATE TABLE chapters (
   chapter_number INTEGER NOT NULL, -- Top-level: 0, 1, 2, etc.
   section_number INTEGER, -- For subsections
   subsection_number INTEGER, -- For sub-subsections
+  clause_number INTEGER, -- For fourth-level entries
   heading TEXT NOT NULL,
   display_order INTEGER NOT NULL, -- For manual ordering within siblings
-  depth INTEGER NOT NULL DEFAULT 0, -- 0=chapter, 1=section, 2=subsection
+  depth INTEGER NOT NULL DEFAULT 0, -- 0=chapter, 1=section, 2=subsection, 3=clause
   page_break BOOLEAN NOT NULL DEFAULT false, -- Force page break before this chapter
   is_mandatory BOOLEAN NOT NULL DEFAULT false, -- Chapter 0 is mandatory
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -86,21 +87,22 @@ CREATE TABLE chapters (
   updated_by UUID REFERENCES auth.users(id),
 
   -- Ensure chapter 0 exists for all manuals
-  CONSTRAINT unique_chapter_per_manual UNIQUE(manual_id, chapter_number, section_number, subsection_number),
+  CONSTRAINT unique_chapter_per_manual UNIQUE(manual_id, chapter_number, section_number, subsection_number, clause_number),
   -- Depth validation
-  CONSTRAINT valid_depth CHECK (depth >= 0 AND depth <= 2),
+  CONSTRAINT valid_depth CHECK (depth >= 0 AND depth <= 3),
   -- Numbering logic validation
   CONSTRAINT valid_numbering CHECK (
-    (depth = 0 AND section_number IS NULL AND subsection_number IS NULL) OR
-    (depth = 1 AND section_number IS NOT NULL AND subsection_number IS NULL) OR
-    (depth = 2 AND section_number IS NOT NULL AND subsection_number IS NOT NULL)
+    (depth = 0 AND section_number IS NULL AND subsection_number IS NULL AND clause_number IS NULL) OR
+    (depth = 1 AND section_number IS NOT NULL AND subsection_number IS NULL AND clause_number IS NULL) OR
+    (depth = 2 AND section_number IS NOT NULL AND subsection_number IS NOT NULL AND clause_number IS NULL) OR
+    (depth = 3 AND section_number IS NOT NULL AND subsection_number IS NOT NULL AND clause_number IS NOT NULL)
   )
 );
 
 CREATE INDEX idx_chapters_manual ON chapters(manual_id);
 CREATE INDEX idx_chapters_parent ON chapters(parent_id);
 CREATE INDEX idx_chapters_display_order ON chapters(manual_id, display_order);
-CREATE INDEX idx_chapters_number ON chapters(manual_id, chapter_number, section_number, subsection_number);
+CREATE INDEX idx_chapters_number ON chapters(manual_id, chapter_number, section_number, subsection_number, clause_number);
 
 -- =====================================================
 -- 5. CONTENT BLOCKS

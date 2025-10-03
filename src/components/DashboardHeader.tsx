@@ -6,11 +6,11 @@ import GlobalSearch from './GlobalSearch'
 import { User } from 'lucide-react'
 
 export default function DashboardHeader() {
-  const supabase = createClient()
   const [userEmail, setUserEmail] = useState<string>('')
   const [userName, setUserName] = useState<string>('')
 
   useEffect(() => {
+    const supabase = createClient()
     const fetchUserInfo = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {

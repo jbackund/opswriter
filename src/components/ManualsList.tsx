@@ -739,7 +739,7 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
                         Clone Manual
                       </h3>
                       <p className="text-sm text-gray-500 mb-4">
-                        This will create a new manual with the same chapter structure as "{selectedManualForClone.title}". Content will not be copied.
+                        This will create a new manual with the same chapter structure as &ldquo;{selectedManualForClone.title}&rdquo;. Content will not be copied.
                       </p>
                       <div className="space-y-4">
                         <div>

@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
 
     // Get recipient details from database
     const { data: recipientUsers, error: userError } = await supabase
-      .from('users')
-      .select('email, name')
+      .from('user_profiles')
+      .select('id, email, full_name')
       .in('id', Array.isArray(recipients) ? recipients : [recipients])
 
     if (userError) {
@@ -58,9 +58,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get sender details
-    const { data: senderUser } = await supabase
-      .from('users')
-      .select('name')
+    const { data: senderProfile } = await supabase
+      .from('user_profiles')
+      .select('full_name')
       .eq('id', user.id)
       .single()
 
@@ -72,9 +72,9 @@ export async function POST(request: NextRequest) {
     // Prepare email data
     const emailData: EmailData = {
       ...data,
-      senderName: senderUser?.name || user.email?.split('@')[0] || 'System',
+      senderName: senderProfile?.full_name || user.email?.split('@')[0] || 'System',
       recipientName: recipientUsers.length === 1
-        ? recipientUsers[0].name || 'Team Member'
+        ? recipientUsers[0].full_name || 'Team Member'
         : 'Team',
     }
 
@@ -102,11 +102,12 @@ export async function POST(request: NextRequest) {
 
     // Log notification to audit trail
     await supabase.from('audit_logs').insert({
+      actor_id: user.id,
       user_id: user.id,
       action: 'notification_sent',
-      resource_type: 'email',
-      resource_id: data.manualId,
-      details: {
+      entity_type: 'email',
+      entity_id: data.manualId ?? null,
+      metadata: {
         type,
         recipients: recipientUsers.map(u => u.email),
         manual_title: data.manualTitle,

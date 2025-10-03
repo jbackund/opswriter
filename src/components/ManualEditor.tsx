@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import RichTextEditor from './RichTextEditor'
@@ -61,6 +61,7 @@ interface Chapter {
   chapter_number: number
   section_number: number | null
   subsection_number: number | null
+  clause_number: number | null
   heading: string
   content?: string  // Deprecated - kept for backward compatibility
   content_blocks?: ContentBlock[]
@@ -120,7 +121,7 @@ const getChapterContent = (chapter: Chapter): string => {
 
 export default function ManualEditor({ manual: initialManual, userId, readOnly = false }: ManualEditorProps) {
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   // State
   const [manual, setManual] = useState(initialManual)
@@ -144,7 +145,8 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   // Autosave state
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null)
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const saveChapterRef = useRef<(isAutoSave?: boolean) => Promise<void> | void>()
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'audit' | 'references' | 'activity'>('editor')
@@ -180,16 +182,18 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       setChapterContent(getChapterContent(chapter0))
       setPageBreakBefore(chapter0.page_break)
     }
-  }, [chapters])
+  }, [chapters, selectedChapter])
 
   // Autosave effect
   useEffect(() => {
-    if (!selectedChapter) return
-    if (isReadOnly) return
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
+    }
 
-    // Clear existing timer
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer)
+    if (!selectedChapter || isReadOnly) {
+      setHasUnsavedChanges(false)
+      return
     }
 
     // Check if there are changes to save
@@ -204,19 +208,22 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
       // Set new timer for autosave (30 seconds)
       const timer = setTimeout(() => {
-        saveChapter(true) // Pass true to indicate autosave
+        saveChapterRef.current?.(true) // Pass true to indicate autosave
       }, 30000)
 
-      setAutoSaveTimer(timer)
-    }
+      autoSaveTimerRef.current = timer
 
-    // Cleanup
-    return () => {
-      if (autoSaveTimer) {
-        clearTimeout(autoSaveTimer)
+      return () => {
+        clearTimeout(timer)
+        if (autoSaveTimerRef.current === timer) {
+          autoSaveTimerRef.current = null
+        }
       }
     }
-  }, [chapterTitle, chapterContent, pageBreakBefore])
+
+    setHasUnsavedChanges(false)
+    return
+  }, [chapterContent, chapterTitle, isReadOnly, pageBreakBefore, selectedChapter])
 
   // Build chapter tree
   const buildChapterTree = (parentId: string | null = null, level: number = 0): any[] => {
@@ -271,6 +278,10 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
     if (typeof chapter.subsection_number === 'number') {
       parts.push(chapter.subsection_number)
+    }
+
+    if (typeof chapter.clause_number === 'number') {
+      parts.push(chapter.clause_number)
     }
 
     return parts.join('.') || chapter.chapter_number.toString()
@@ -346,6 +357,8 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
         chapter_number: assignedChapterNumber,
         section_number: null,
         subsection_number: null,
+        clause_number: null,
+        depth: 0,
         display_order: chapterIndex,
       })
 
@@ -357,6 +370,8 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
           chapter_number: assignedChapterNumber,
           section_number: sectionNumber,
           subsection_number: null,
+          clause_number: null,
+          depth: 1,
           display_order: sectionIndex,
         })
 
@@ -366,7 +381,21 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
             chapter_number: assignedChapterNumber,
             section_number: sectionNumber,
             subsection_number: subsectionIndex + 1,
+            clause_number: null,
+            depth: 2,
             display_order: subsectionIndex,
+          })
+
+          const clauses = childrenMap.get(subsection.id) ?? []
+          clauses.forEach((clause, clauseIndex) => {
+            applyUpdate(clause.id, {
+              chapter_number: assignedChapterNumber,
+              section_number: sectionNumber,
+              subsection_number: subsectionIndex + 1,
+              clause_number: clauseIndex + 1,
+              depth: 3,
+              display_order: clauseIndex,
+            })
           })
         })
       })
@@ -429,6 +458,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       let chapterNum: number
       let sectionNum: number | null = null
       let subsectionNum: number | null = null
+      let clauseNum: number | null = null
 
       if (parentChapter) {
         depth = parentChapter.depth + 1
@@ -439,13 +469,24 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
             siblings.map(ch => ch.section_number),
             1
           )
-        } else {
+        } else if (depth === 2) {
           chapterNum = parentChapter.chapter_number
           sectionNum = parentChapter.section_number
           subsectionNum = getNextSequenceValue(
             siblings.map(ch => ch.subsection_number),
             1
           )
+        } else if (depth === 3) {
+          chapterNum = parentChapter.chapter_number
+          sectionNum = parentChapter.section_number
+          subsectionNum = parentChapter.subsection_number
+          clauseNum = getNextSequenceValue(
+            siblings.map(ch => ch.clause_number),
+            1
+          )
+        } else {
+          setError('Maximum chapter depth reached')
+          return
         }
       } else {
         const fallbackStart = siblings.some(ch => ch.chapter_number === 0) ? 1 : 0
@@ -464,6 +505,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
           chapter_number: chapterNum,
           section_number: sectionNum,
           subsection_number: subsectionNum,
+          clause_number: clauseNum,
           heading: 'New Chapter',
           content: '',
           page_break: false,
@@ -501,7 +543,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   }
 
   // Save chapter
-  const saveChapter = async (isAutoSave = false) => {
+  const saveChapter = useCallback(async (isAutoSave = false) => {
     if (!selectedChapter) return
     if (isReadOnly) return
 
@@ -524,11 +566,13 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       if (updateError) throw updateError
 
       // Check if content_block exists for this chapter
-      const { data: existingBlock } = await supabase
+      const { data: existingBlock, error: existingBlockError } = await supabase
         .from('content_blocks')
         .select('id')
         .eq('chapter_id', selectedChapter.id)
-        .single()
+        .maybeSingle()
+
+      if (existingBlockError) throw existingBlockError
 
       if (existingBlock) {
         // Update existing content block
@@ -584,9 +628,9 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
           : []
       }
 
-      setChapters(chapters.map(ch =>
-        ch.id === selectedChapter.id ? updatedChapter : ch
-      ))
+      setChapters(prev =>
+        prev.map(ch => (ch.id === selectedChapter.id ? updatedChapter : ch))
+      )
       setSelectedChapter(updatedChapter)
 
       // Update save status
@@ -607,7 +651,11 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
         setSaving(false)
       }
     }
-  }
+  }, [chapterContent, chapterTitle, isReadOnly, pageBreakBefore, selectedChapter, supabase, userId])
+
+  useEffect(() => {
+    saveChapterRef.current = saveChapter
+  }, [saveChapter])
 
   // Delete chapter
   const deleteChapter = async (chapterId: string) => {
@@ -1006,16 +1054,18 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                 >
                   <Edit3 className="h-3 w-3 text-gray-500" />
                 </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    addChapter(chapter.id)
-                  }}
-                  className="p-1 hover:bg-gray-200 rounded"
-                  title="Add subchapter"
-                >
-                  <Plus className="h-3 w-3 text-gray-500" />
-                </button>
+                {chapter.depth < 3 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      addChapter(chapter.id)
+                    }}
+                    className="p-1 hover:bg-gray-200 rounded"
+                    title="Add subchapter"
+                  >
+                    <Plus className="h-3 w-3 text-gray-500" />
+                  </button>
+                )}
                 {chapter.chapter_number !== 0 && (
                   <button
                     onClick={(e) => {

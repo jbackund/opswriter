@@ -591,7 +591,8 @@ function generateChaptersContent(chapters: any[], exportType: string = 'clean', 
         const prevChapter = previousRevision.snapshot.manual.chapters.find(
           (ch: any) => ch.chapter_number === chapter.chapter_number &&
                       ch.section_number === chapter.section_number &&
-                      ch.subsection_number === chapter.subsection_number
+                      ch.subsection_number === chapter.subsection_number &&
+                      ch.clause_number === chapter.clause_number
         )
         if (prevChapter) {
           previousChapterHeading = prevChapter.heading || ''
@@ -661,6 +662,7 @@ function formatChapterNumber(chapter: any): string {
   const parts = [chapter.chapter_number]
   if (chapter.section_number !== null) parts.push(chapter.section_number)
   if (chapter.subsection_number !== null) parts.push(chapter.subsection_number)
+  if (chapter.clause_number !== null) parts.push(chapter.clause_number)
   return parts.join('.')
 }
 

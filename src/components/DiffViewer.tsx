@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { GitCompare, X, Check, Minus, Plus, AlertCircle } from 'lucide-react'
 
 interface Revision {
@@ -31,11 +31,7 @@ export default function DiffViewer({ revisionA, revisionB, onClose }: DiffViewer
   const [chapterDiffs, setChapterDiffs] = useState<any[]>([])
   const [selectedTab, setSelectedTab] = useState<'manual' | 'chapters'>('manual')
 
-  useEffect(() => {
-    calculateDiffs()
-  }, [revisionA, revisionB])
-
-  const calculateDiffs = () => {
+  const calculateDiffs = useCallback(() => {
     const manualA = revisionA.snapshot?.manual
     const manualB = revisionB.snapshot?.manual
 
@@ -74,15 +70,20 @@ export default function DiffViewer({ revisionA, revisionB, onClose }: DiffViewer
 
     const chapterMap = new Map()
 
+    const buildChapterKey = (ch: any) =>
+      [ch.chapter_number, ch.section_number, ch.subsection_number, ch.clause_number]
+        .filter(value => value !== null && value !== undefined)
+        .join('.')
+
     // Process chapters from A
     chaptersA.forEach((ch: any) => {
-      const key = `${ch.chapter_number}.${ch.section_number ?? ''}.${ch.subsection_number ?? ''}`
+      const key = buildChapterKey(ch)
       chapterMap.set(key, { old: ch, new: null })
     })
 
     // Process chapters from B
     chaptersB.forEach((ch: any) => {
-      const key = `${ch.chapter_number}.${ch.section_number ?? ''}.${ch.subsection_number ?? ''}`
+      const key = buildChapterKey(ch)
       if (chapterMap.has(key)) {
         chapterMap.get(key).new = ch
       } else {
@@ -123,7 +124,11 @@ export default function DiffViewer({ revisionA, revisionB, onClose }: DiffViewer
     })
 
     setChapterDiffs(chapterDiffsList)
-  }
+  }, [revisionA, revisionB])
+
+  useEffect(() => {
+    calculateDiffs()
+  }, [calculateDiffs])
 
   const formatValue = (value: any) => {
     if (value === null || value === undefined) return <span className="text-gray-400 italic">null</span>

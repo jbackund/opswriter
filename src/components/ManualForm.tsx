@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import NextImage from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -11,7 +12,7 @@ import {
   FileText,
   Globe,
   Hash,
-  Image,
+  Image as ImageIcon,
   Save,
   Tag,
   User,
@@ -35,6 +36,7 @@ interface Chapter {
   chapter_number: number
   section_number: number | null
   subsection_number: number | null
+  clause_number: number | null
   heading: string
   content?: string
   page_break: boolean
@@ -284,9 +286,21 @@ export default function ManualForm({
 
       if (manualError) throw manualError
 
-      // If cloning, copy chapter structure
+      // Locate the auto-generated Chapter 0 (created by trigger)
+      const { data: existingChapter0, error: chapter0Error } = await supabase
+        .from('chapters')
+        .select('*')
+        .eq('manual_id', manual.id)
+        .eq('chapter_number', 0)
+        .is('parent_id', null)
+        .order('display_order', { ascending: true })
+        .maybeSingle()
+
+      if (chapter0Error) {
+        throw chapter0Error
+      }
+
       if (sourceChapters && sourceChapters.length > 0) {
-        // Create a mapping of old IDs to new IDs for maintaining parent relationships
         const idMapping: Record<string, string> = {}
 
         // Sort chapters by parent_id (null first) and then by display_order
@@ -296,8 +310,34 @@ export default function ManualForm({
           return a.display_order - b.display_order
         })
 
-        // Clone each chapter
         for (const sourceChapter of sortedChapters) {
+          const isRootChapter = sourceChapter.chapter_number === 0 && sourceChapter.parent_id === null
+
+          if (isRootChapter && existingChapter0) {
+            const { data: updatedChapter, error: updateError } = await supabase
+              .from('chapters')
+              .update({
+                heading: sourceChapter.heading,
+                section_number: sourceChapter.section_number,
+                subsection_number: sourceChapter.subsection_number,
+                clause_number: sourceChapter.clause_number,
+                page_break: sourceChapter.page_break,
+                display_order: sourceChapter.display_order,
+                depth: sourceChapter.depth,
+                is_mandatory: sourceChapter.is_mandatory,
+                content: '',
+                updated_by: userProfile?.id || null,
+              })
+              .eq('id', existingChapter0.id)
+              .select()
+              .single()
+
+            if (updateError) throw updateError
+
+            idMapping[sourceChapter.id] = updatedChapter.id
+            continue
+          }
+
           const newParentId = sourceChapter.parent_id
             ? idMapping[sourceChapter.parent_id]
             : null
@@ -310,8 +350,9 @@ export default function ManualForm({
               chapter_number: sourceChapter.chapter_number,
               section_number: sourceChapter.section_number,
               subsection_number: sourceChapter.subsection_number,
+              clause_number: sourceChapter.clause_number,
               heading: sourceChapter.heading,
-              content: '', // Don't copy content
+              content: '',
               page_break: sourceChapter.page_break,
               display_order: sourceChapter.display_order,
               depth: sourceChapter.depth,
@@ -323,29 +364,24 @@ export default function ManualForm({
 
           if (chapterError) throw chapterError
 
-          // Store the ID mapping
           idMapping[sourceChapter.id] = newChapter.id
         }
-      } else {
-        // Create mandatory Chapter 0 for new manuals
-        const { error: chapterError } = await supabase
+      } else if (existingChapter0) {
+        await supabase
           .from('chapters')
-          .insert({
-            manual_id: manual.id,
-            parent_id: null,
-            chapter_number: 0,
-            section_number: null,
-            subsection_number: null,
+          .update({
             heading: 'Introduction',
-            content: '',
             page_break: false,
             display_order: 0,
             depth: 0,
+            section_number: null,
+            subsection_number: null,
+            clause_number: null,
             is_mandatory: true,
-            created_by: userProfile?.id
+            content: '',
+            updated_by: userProfile?.id || null,
           })
-
-        if (chapterError) throw chapterError
+          .eq('id', existingChapter0.id)
       }
 
       // Log to audit trail
@@ -692,14 +728,17 @@ export default function ManualForm({
           </label>
           <div className="mt-1 flex items-center space-x-4">
             {coverLogoUrl ? (
-              <img
+              <NextImage
                 src={coverLogoUrl}
                 alt="Cover logo"
+                width={80}
+                height={80}
                 className="h-20 w-20 object-contain border border-gray-300 rounded"
+                unoptimized
               />
             ) : (
               <div className="h-20 w-20 border-2 border-gray-300 border-dashed rounded flex items-center justify-center">
-                <Image className="h-8 w-8 text-gray-400" />
+                <ImageIcon className="h-8 w-8 text-gray-400" />
               </div>
             )}
             <div>

@@ -647,7 +647,7 @@ export default function AbbreviationsList({ initialAbbreviations }: Abbreviation
             </div>
 
             <p className="text-gray-600 mb-4">
-              Are you sure you want to delete the abbreviation "<strong>{selectedAbbreviation.abbreviation}</strong>" ({selectedAbbreviation.full_text})?
+              Are you sure you want to delete the abbreviation &ldquo;<strong>{selectedAbbreviation.abbreviation}</strong>&rdquo; ({selectedAbbreviation.full_text})?
               This action cannot be undone.
             </p>
 

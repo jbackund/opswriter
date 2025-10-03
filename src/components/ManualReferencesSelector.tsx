@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   Search,
@@ -40,7 +40,7 @@ export default function ManualReferencesSelector({
   organizationName = 'Heli Air Sweden',
   onUpdate
 }: ManualReferencesSelectorProps) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   // State for definitions
   const [allDefinitions, setAllDefinitions] = useState<Definition[]>([])
@@ -62,11 +62,7 @@ export default function ManualReferencesSelector({
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   // Load data on mount
-  useEffect(() => {
-    loadData()
-  }, [manualId])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -115,7 +111,11 @@ export default function ManualReferencesSelector({
     } finally {
       setLoading(false)
     }
-  }
+  }, [manualId, organizationName, supabase])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   // Filter definitions
   const filteredDefinitions = useMemo(() => {

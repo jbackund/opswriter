@@ -19,14 +19,14 @@ import {
 export default function DashboardNav() {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
   const [userRole, setUserRole] = useState<string>('manager')
 
   useEffect(() => {
+    const supabaseClient = createClient()
     const fetchUserRole = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await supabaseClient.auth.getUser()
       if (user) {
-        const { data: profile } = await supabase
+        const { data: profile } = await supabaseClient
           .from('user_profiles')
           .select('role')
           .eq('id', user.id)
@@ -42,7 +42,8 @@ export default function DashboardNav() {
   }, [])
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
+    const supabaseClient = createClient()
+    await supabaseClient.auth.signOut()
     router.push('/login')
   }
 

@@ -28,7 +28,7 @@ export default function ManualReviewActions({ manualId, revisionId, revisionNumb
       const supabase = createClient()
       const { data } = await supabase
         .from('manuals')
-        .select('title, owner_id')
+        .select('title, created_by')
         .eq('id', manualId)
         .single()
 
@@ -63,8 +63,8 @@ export default function ManualReviewActions({ manualId, revisionId, revisionNumb
       }
 
       // Send approval notification to the manual owner
-      if (manualData?.owner_id) {
-        await sendApproval(manualData.owner_id, {
+      if (manualData?.created_by) {
+        await sendApproval(manualData.created_by, {
           manualId,
           manualTitle: manualData.title,
           manualRevision: revisionNumber,
@@ -112,8 +112,8 @@ export default function ManualReviewActions({ manualId, revisionId, revisionNumb
       }
 
       // Send rejection notification to the manual owner
-      if (manualData?.owner_id) {
-        await sendRejection(manualData.owner_id, {
+      if (manualData?.created_by) {
+        await sendRejection(manualData.created_by, {
           manualId,
           manualTitle: manualData.title,
           manualRevision: revisionNumber,

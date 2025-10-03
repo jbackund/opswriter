@@ -130,6 +130,7 @@ export async function POST(
             chapter_number: chapter.chapter_number,
             section_number: chapter.section_number,
             subsection_number: chapter.subsection_number,
+            clause_number: chapter.clause_number,
             heading: chapter.heading,
             display_order: chapter.display_order,
             depth: chapter.depth,
@@ -201,7 +202,7 @@ export async function POST(
         },
         changes_summary: `Restored from revision ${targetRevision.revision_number}`,
         chapters_affected: manualData.chapters?.map((ch: any) =>
-          `${ch.chapter_number}${ch.section_number ? `.${ch.section_number}` : ''}${ch.subsection_number ? `.${ch.subsection_number}` : ''}`
+          `${ch.chapter_number}${ch.section_number ? `.${ch.section_number}` : ''}${ch.subsection_number ? `.${ch.subsection_number}` : ''}${ch.clause_number ? `.${ch.clause_number}` : ''}`
         ) || [],
         created_by: user.id,
       })
