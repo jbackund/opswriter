@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@/lib/supabase/client'
 import { Save, Upload, AlertCircle, Check } from 'lucide-react'
 
 interface OrganizationSettingsData {
@@ -16,7 +16,7 @@ interface OrganizationSettingsData {
 }
 
 export default function OrganizationSettings() {
-  const supabase = createClientComponentClient()
+  const supabase = createClient()
   const [settings, setSettings] = useState<OrganizationSettingsData>({
     organization_name: '',
     logo_url: null,

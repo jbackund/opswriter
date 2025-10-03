@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@/lib/supabase/client'
 import { Settings, Building2, Palette, FileText, Hash, Shield, Save } from 'lucide-react'
 import OrganizationSettings from '@/components/settings/OrganizationSettings'
 import ReferenceCategoriesSettings from '@/components/settings/ReferenceCategoriesSettings'
@@ -42,7 +42,7 @@ const tabs: SettingsTab[] = [
 
 export default function SettingsPage() {
   const router = useRouter()
-  const supabase = createClientComponentClient()
+  const supabase = createClient()
   const [activeTab, setActiveTab] = useState('organization')
   const [userRole, setUserRole] = useState<'manager' | 'sysadmin'>('manager')
   const [loading, setLoading] = useState(true)

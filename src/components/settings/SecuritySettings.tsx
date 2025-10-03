@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@/lib/supabase/client'
 import { Shield, Clock, User, FileText, AlertCircle, Check, Lock, Activity } from 'lucide-react'
 
 interface AuditLog {
@@ -21,7 +21,7 @@ interface SecuritySettingsProps {
 }
 
 export default function SecuritySettings({ userRole }: SecuritySettingsProps) {
-  const supabase = createClientComponentClient()
+  const supabase = createClient()
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [sessionInfo, setSessionInfo] = useState<any>(null)

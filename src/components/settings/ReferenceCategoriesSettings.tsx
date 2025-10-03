@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit2, Trash2, Save, X, ChevronUp, ChevronDown, Check, AlertCircle } from 'lucide-react'
 
 interface ReferenceCategory {
@@ -14,7 +14,7 @@ interface ReferenceCategory {
 }
 
 export default function ReferenceCategoriesSettings() {
-  const supabase = createClientComponentClient()
+  const supabase = createClient()
   const [categories, setCategories] = useState<ReferenceCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
