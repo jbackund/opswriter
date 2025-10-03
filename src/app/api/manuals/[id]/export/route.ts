@@ -78,13 +78,41 @@ export async function POST(
       includeWatermark
     )
 
+    // Determine if we're in development or production
+    const isDev = process.env.NODE_ENV === 'development'
+
     // Launch browser and generate PDF
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-    })
+    // In development, use local Chrome; in production, use @sparticuz/chromium
+    let browser
+    try {
+      browser = await puppeteer.launch(
+        isDev
+          ? {
+              // Local development - try common Chrome locations on macOS
+              executablePath: process.env.CHROME_PATH ||
+                             '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            }
+          : {
+              // Production - use @sparticuz/chromium for serverless
+              args: chromium.args,
+              defaultViewport: chromium.defaultViewport,
+              executablePath: await chromium.executablePath(),
+              headless: chromium.headless,
+            }
+      )
+    } catch (launchError) {
+      console.error('Browser launch error:', launchError)
+      return NextResponse.json(
+        {
+          error: isDev
+            ? 'Chrome not found. Please install Google Chrome or set CHROME_PATH environment variable to your Chrome executable.'
+            : 'Failed to initialize PDF generator'
+        },
+        { status: 500 }
+      )
+    }
 
     const page = await browser.newPage()
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' })
@@ -106,7 +134,8 @@ export async function POST(
     await browser.close()
 
     // Store PDF in Supabase Storage
-    const fileName = `${manual.manual_code}_${manual.current_revision}_${Date.now()}.pdf`
+    // Path format: {user_id}/{filename}.pdf for RLS policy compliance
+    const fileName = `${user.id}/${manual.manual_code}_${manual.current_revision}_${Date.now()}.pdf`
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('exports')
       .upload(fileName, pdf, {
