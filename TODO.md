@@ -92,9 +92,9 @@
 - [x] Establish monitoring/alerting (Supabase logs, Vercel analytics, email delivery status)
 
 ## 16. QA & Compliance
-- [ ] Develop test plan covering unit, integration, end-to-end (critical flows: editing, review, exports)
-- [ ] Generate sample data/manuals for UAT and PDF baseline comparisons
-- [ ] Perform accessibility audit (WCAG 2.1 AA) on dashboard, editor, exports selection
+- [x] Develop test plan covering unit, integration, end-to-end (critical flows: editing, review, exports)
+- [x] Generate sample data/manuals for UAT and PDF baseline comparisons
+- [x] Perform accessibility audit (WCAG 2.1 AA) on dashboard, editor, exports selection
 - [x] Validate security controls (role enforcement, audit log immutability, storage permissions)
 
 ## 17. Documentation & Launch Prep
