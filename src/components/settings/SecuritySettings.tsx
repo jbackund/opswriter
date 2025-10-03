@@ -9,9 +9,9 @@ interface AuditLog {
   action: string
   entity_type: string
   entity_id: string
-  user_id: string
-  user_email?: string
-  changes?: any
+  actor_id: string
+  actor_email?: string
+  metadata?: any
   ip_address?: string
   created_at: string
 }
@@ -46,21 +46,13 @@ export default function SecuritySettings({ userRole }: SecuritySettingsProps) {
       // Load recent audit logs (last 50)
       const { data: logs, error } = await supabase
         .from('audit_logs')
-        .select(`
-          *,
-          user_profiles!audit_logs_user_id_fkey(email)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(50)
 
       if (error) throw error
 
-      setAuditLogs(
-        logs?.map(log => ({
-          ...log,
-          user_email: log.user_profiles?.email,
-        })) || []
-      )
+      setAuditLogs(logs || [])
 
       // Check MFA status
       const { data: { user } } = await supabase.auth.getUser()
@@ -198,7 +190,7 @@ export default function SecuritySettings({ userRole }: SecuritySettingsProps) {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-gray-600">
-                          {log.user_email || 'System'}
+                          {log.actor_email || 'System'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
