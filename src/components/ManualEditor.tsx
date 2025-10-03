@@ -42,6 +42,18 @@ import {
   Clock
 } from 'lucide-react'
 
+interface ContentBlock {
+  id: string
+  chapter_id: string
+  block_type: string
+  content: any
+  display_order: number
+  created_at: string
+  updated_at: string
+  created_by: string
+  updated_by: string | null
+}
+
 interface Chapter {
   id: string
   manual_id: string
@@ -50,7 +62,8 @@ interface Chapter {
   section_number: number | null
   subsection_number: number | null
   heading: string
-  content?: string
+  content?: string  // Deprecated - kept for backward compatibility
+  content_blocks?: ContentBlock[]
   page_break: boolean
   display_order: number
   depth: number
@@ -88,6 +101,21 @@ interface ManualEditorProps {
   manual: Manual
   userId: string
   readOnly?: boolean
+}
+
+// Helper function to get content from content_blocks or fallback to content field
+const getChapterContent = (chapter: Chapter): string => {
+  // If content_blocks exist, extract HTML from the first block
+  if (chapter.content_blocks && chapter.content_blocks.length > 0) {
+    const firstBlock = chapter.content_blocks[0]
+    if (firstBlock.content?.html) {
+      return firstBlock.content.html
+    }
+    // Handle other content types if needed
+    return typeof firstBlock.content === 'string' ? firstBlock.content : ''
+  }
+  // Fallback to deprecated content field
+  return chapter.content || ''
 }
 
 export default function ManualEditor({ manual: initialManual, userId, readOnly = false }: ManualEditorProps) {
@@ -149,7 +177,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     if (chapter0 && !selectedChapter) {
       setSelectedChapter(chapter0)
       setChapterTitle(chapter0.heading)
-      setChapterContent(chapter0.content || '')
+      setChapterContent(getChapterContent(chapter0))
       setPageBreakBefore(chapter0.page_break)
     }
   }, [chapters])
@@ -167,7 +195,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     // Check if there are changes to save
     const hasChanges = (
       chapterTitle !== selectedChapter.heading ||
-      chapterContent !== selectedChapter.content ||
+      chapterContent !== getChapterContent(selectedChapter) ||
       pageBreakBefore !== selectedChapter.page_break
     )
 
@@ -372,7 +400,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     // Save current chapter if changed
     if (!isReadOnly && selectedChapter && (
       chapterTitle !== selectedChapter.heading ||
-      chapterContent !== selectedChapter.content ||
+      chapterContent !== getChapterContent(selectedChapter) ||
       pageBreakBefore !== selectedChapter.page_break
     )) {
       saveChapter(false) // Not an autosave
@@ -380,7 +408,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
     setSelectedChapter(chapter)
     setChapterTitle(chapter.heading)
-    setChapterContent(chapter.content || '')
+    setChapterContent(getChapterContent(chapter))
     setPageBreakBefore(chapter.page_break)
     setEditingChapter(null)
     setHasUnsavedChanges(false)
@@ -455,7 +483,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       addToHistory(newChapters)
       setSelectedChapter(data)
       setChapterTitle(data.heading)
-      setChapterContent(data.content || '')
+      setChapterContent(getChapterContent(data))
       setPageBreakBefore(data.page_break)
       setEditingChapter(data.id)
 
@@ -483,11 +511,11 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     setError(null)
 
     try {
+      // First update chapter heading and page_break
       const { error: updateError } = await supabase
         .from('chapters')
         .update({
           heading: chapterTitle,
-          content: chapterContent,
           page_break: pageBreakBefore,
           updated_at: new Date().toISOString()
         })
@@ -495,13 +523,71 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
       if (updateError) throw updateError
 
+      // Check if content_block exists for this chapter
+      const { data: existingBlock } = await supabase
+        .from('content_blocks')
+        .select('id')
+        .eq('chapter_id', selectedChapter.id)
+        .single()
+
+      if (existingBlock) {
+        // Update existing content block
+        const { error: blockError } = await supabase
+          .from('content_blocks')
+          .update({
+            content: {
+              type: 'html',
+              html: chapterContent
+            },
+            updated_by: userId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingBlock.id)
+
+        if (blockError) throw blockError
+      } else if (chapterContent && chapterContent.trim()) {
+        // Create new content block only if there's content
+        const { error: blockError } = await supabase
+          .from('content_blocks')
+          .insert({
+            chapter_id: selectedChapter.id,
+            block_type: 'text',
+            content: {
+              type: 'html',
+              html: chapterContent
+            },
+            display_order: 0,
+            created_by: userId,
+            updated_by: userId
+          })
+
+        if (blockError) throw blockError
+      }
+
       // Update local state
+      const updatedChapter = {
+        ...selectedChapter,
+        heading: chapterTitle,
+        page_break: pageBreakBefore,
+        content_blocks: existingBlock || chapterContent.trim()
+          ? [{
+              id: existingBlock?.id || 'temp-id',
+              chapter_id: selectedChapter.id,
+              block_type: 'text',
+              content: { type: 'html', html: chapterContent },
+              display_order: 0,
+              created_at: selectedChapter.created_at,
+              updated_at: new Date().toISOString(),
+              created_by: userId,
+              updated_by: userId
+            }]
+          : []
+      }
+
       setChapters(chapters.map(ch =>
-        ch.id === selectedChapter.id
-          ? { ...ch, heading: chapterTitle, content: chapterContent, page_break: pageBreakBefore }
-          : ch
+        ch.id === selectedChapter.id ? updatedChapter : ch
       ))
-      setSelectedChapter({ ...selectedChapter, heading: chapterTitle, content: chapterContent, page_break: pageBreakBefore })
+      setSelectedChapter(updatedChapter)
 
       // Update save status
       setLastSaved(new Date())

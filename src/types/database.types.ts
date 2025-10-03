@@ -53,36 +53,39 @@ export type Database = {
       audit_logs: {
         Row: {
           action: string
+          actor_email: string | null
+          actor_id: string | null
           created_at: string
-          details: Json | null
           entity_id: string | null
           entity_type: string
           id: string
           ip_address: unknown | null
+          metadata: Json | null
           user_agent: string | null
-          user_id: string | null
         }
         Insert: {
           action: string
+          actor_email?: string | null
+          actor_id?: string | null
           created_at?: string
-          details?: Json | null
           entity_id?: string | null
           entity_type: string
           id?: string
           ip_address?: unknown | null
+          metadata?: Json | null
           user_agent?: string | null
-          user_id?: string | null
         }
         Update: {
           action?: string
+          actor_email?: string | null
+          actor_id?: string | null
           created_at?: string
-          details?: Json | null
           entity_id?: string | null
           entity_type?: string
           id?: string
           ip_address?: unknown | null
+          metadata?: Json | null
           user_agent?: string | null
-          user_id?: string | null
         }
         Relationships: []
       }
@@ -130,6 +133,7 @@ export type Database = {
       chapters: {
         Row: {
           chapter_number: number
+          content: string | null
           created_at: string
           created_by: string
           depth: number
@@ -147,6 +151,7 @@ export type Database = {
         }
         Insert: {
           chapter_number: number
+          content?: string | null
           created_at?: string
           created_by: string
           depth?: number
@@ -164,6 +169,7 @@ export type Database = {
         }
         Update: {
           chapter_number?: number
+          content?: string | null
           created_at?: string
           created_by?: string
           depth?: number
@@ -482,6 +488,7 @@ export type Database = {
       }
       manuals: {
         Row: {
+          cover_logo_url: string | null
           created_at: string
           created_by: string
           current_revision: string
@@ -489,16 +496,20 @@ export type Database = {
           effective_date: string | null
           id: string
           is_archived: boolean
+          language: string | null
           manual_code: string
           metadata: Json | null
           organization_name: string
+          reference_number: string | null
           review_due_date: string | null
           status: Database["public"]["Enums"]["manual_status"]
+          tags: string[] | null
           title: string
           updated_at: string
           updated_by: string | null
         }
         Insert: {
+          cover_logo_url?: string | null
           created_at?: string
           created_by: string
           current_revision?: string
@@ -506,16 +517,20 @@ export type Database = {
           effective_date?: string | null
           id?: string
           is_archived?: boolean
+          language?: string | null
           manual_code: string
           metadata?: Json | null
           organization_name: string
+          reference_number?: string | null
           review_due_date?: string | null
           status?: Database["public"]["Enums"]["manual_status"]
+          tags?: string[] | null
           title: string
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
+          cover_logo_url?: string | null
           created_at?: string
           created_by?: string
           current_revision?: string
@@ -523,11 +538,14 @@ export type Database = {
           effective_date?: string | null
           id?: string
           is_archived?: boolean
+          language?: string | null
           manual_code?: string
           metadata?: Json | null
           organization_name?: string
+          reference_number?: string | null
           review_due_date?: string | null
           status?: Database["public"]["Enums"]["manual_status"]
+          tags?: string[] | null
           title?: string
           updated_at?: string
           updated_by?: string | null

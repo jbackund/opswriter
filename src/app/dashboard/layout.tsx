@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import DashboardNav from '@/components/DashboardNav'
+import DashboardHeader from '@/components/DashboardHeader'
 import SessionTimeoutProvider from '@/components/SessionTimeoutProvider'
 
 export default async function DashboardLayout({
@@ -22,7 +23,10 @@ export default async function DashboardLayout({
     <SessionTimeoutProvider>
       <div className="min-h-screen flex">
         <DashboardNav />
-        <main className="flex-1 bg-gray-50">{children}</main>
+        <div className="flex-1 flex flex-col">
+          <DashboardHeader />
+          <main className="flex-1 bg-gray-50">{children}</main>
+        </div>
       </div>
     </SessionTimeoutProvider>
   )

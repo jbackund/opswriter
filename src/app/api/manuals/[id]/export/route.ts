@@ -54,6 +54,21 @@ export async function POST(
       .eq('status', 'approved')
       .order('approved_at', { ascending: true })
 
+    // For diff export, get the last approved revision to compare against
+    let previousRevision = null
+    if (exportType === 'diff') {
+      const { data: lastApproved } = await supabase
+        .from('revisions')
+        .select('*')
+        .eq('manual_id', manualId)
+        .eq('status', 'approved')
+        .order('approved_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      previousRevision = lastApproved
+    }
+
     // Get definitions and abbreviations if selected for this manual
     const { data: manualDefinitions } = await supabase
       .from('manual_definitions')
@@ -75,7 +90,8 @@ export async function POST(
       definitions,
       abbreviations,
       exportType,
-      includeWatermark
+      includeWatermark,
+      previousRevision
     )
 
     // Determine if we're in development or production
@@ -194,7 +210,8 @@ function generatePDFHTML(
   definitions: any[],
   abbreviations: any[],
   exportType: string,
-  includeWatermark: boolean
+  includeWatermark: boolean,
+  previousRevision: any = null
 ): string {
   const chapters = (manual.chapters || []).sort((a: any, b: any) => a.display_order - b.display_order)
 
@@ -313,11 +330,25 @@ function generatePDFHTML(
     .diff-removed {
       text-decoration: line-through;
       color: #d32f2f;
+      background-color: #ffebee;
+      padding: 2px 4px;
+      border-radius: 2px;
     }
 
     .diff-added {
       background: #c8e6c9;
       color: #2e7d32;
+      padding: 2px 4px;
+      border-radius: 2px;
+    }
+
+    .diff-notice {
+      background-color: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 10px;
+      margin: 20px 0;
+      border-radius: 4px;
+      page-break-inside: avoid;
     }
   </style>
 </head>
@@ -347,6 +378,12 @@ function generatePDFHTML(
     ${generateRecordOfRevision(revisions)}
   </div>
 
+  <!-- Chapters Affected -->
+  <div class="chapters-affected">
+    <h2 class="section-title">Chapters Affected in This Revision</h2>
+    ${generateChaptersAffected(manual, revisions)}
+  </div>
+
   <!-- Definitions -->
   ${definitions.length > 0 ? `
   <div class="definitions">
@@ -363,9 +400,18 @@ function generatePDFHTML(
   </div>
   ` : ''}
 
+  <!-- Diff Notice -->
+  ${exportType === 'diff' ? `
+  <div class="diff-notice">
+    <strong>Diff Export:</strong> This document shows changes from the last approved revision.
+    <br><span class="diff-added">Green highlighted text</span> indicates additions.
+    <br><span class="diff-removed">Red strikethrough text</span> indicates deletions.
+  </div>
+  ` : ''}
+
   <!-- Chapters -->
   <div class="chapters">
-    ${generateChaptersContent(chapters)}
+    ${generateChaptersContent(chapters, exportType, previousRevision)}
   </div>
 </body>
 </html>
@@ -384,6 +430,61 @@ function generateTableOfContents(chapters: any[]): string {
       `
     })
     .join('')
+}
+
+function generateChaptersAffected(manual: any, revisions: any[]): string {
+  // Get the latest revision to show which chapters were affected
+  const latestRevision = revisions.length > 0 ? revisions[revisions.length - 1] : null
+
+  // If there's a latest revision with chapters_affected data
+  const chaptersAffected = latestRevision?.chapters_affected || []
+
+  if (chaptersAffected.length === 0) {
+    return '<p>No specific chapters identified as affected in this revision</p>'
+  }
+
+  // Get the full chapter details from the manual
+  const chapters = (manual.chapters || []).filter((ch: any) =>
+    chaptersAffected.includes(ch.chapter_number?.toString())
+  )
+
+  if (chapters.length === 0) {
+    return '<p>No chapters affected in this revision</p>'
+  }
+
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Chapter</th>
+          <th>Title</th>
+          <th>Remarks</th>
+          <th>Effective Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${chapters
+          .map((chapter: any) => {
+            const chapterNumber = formatChapterNumber(chapter)
+            // Get remarks from chapter_remarks if available
+            const remarks = chapter.chapter_remarks?.[0]?.remark || '-'
+            const effectiveDate = manual.effective_date ?
+              new Date(manual.effective_date).toLocaleDateString() :
+              'Pending'
+
+            return `
+              <tr>
+                <td>${chapterNumber}</td>
+                <td>${chapter.heading}</td>
+                <td>${remarks}</td>
+                <td>${effectiveDate}</td>
+              </tr>
+            `
+          })
+          .join('')}
+      </tbody>
+    </table>
+  `
 }
 
 function generateRecordOfRevision(revisions: any[]): string {
@@ -469,7 +570,7 @@ function generateAbbreviationsList(abbreviations: any[]): string {
   `
 }
 
-function generateChaptersContent(chapters: any[]): string {
+function generateChaptersContent(chapters: any[], exportType: string = 'clean', previousRevision: any = null): string {
   return chapters
     .map((chapter: any) => {
       const chapterNumber = formatChapterNumber(chapter)
@@ -480,15 +581,61 @@ function generateChaptersContent(chapters: any[]): string {
       const remarks = (chapter.chapter_remarks || [])
         .sort((a: any, b: any) => a.display_order - b.display_order)
 
+      // Get previous chapter content for diff if available
+      let previousChapterContent = ''
+      let previousChapterHeading = ''
+      if (exportType === 'diff' && previousRevision?.snapshot?.manual?.chapters) {
+        const prevChapter = previousRevision.snapshot.manual.chapters.find(
+          (ch: any) => ch.chapter_number === chapter.chapter_number &&
+                      ch.section_number === chapter.section_number &&
+                      ch.subsection_number === chapter.subsection_number
+        )
+        if (prevChapter) {
+          previousChapterHeading = prevChapter.heading || ''
+          // Get content from previous revision's content_blocks or fallback to content field
+          if (prevChapter.content_blocks && prevChapter.content_blocks.length > 0) {
+            const firstBlock = prevChapter.content_blocks[0]
+            previousChapterContent = firstBlock.content?.html || firstBlock.content || ''
+          } else {
+            previousChapterContent = prevChapter.content || ''
+          }
+        }
+      }
+
+      // Generate diff heading if needed
+      const headingHtml = exportType === 'diff' && previousChapterHeading !== chapter.heading
+        ? `<h3 class="chapter-heading">
+            ${chapterNumber}
+            ${previousChapterHeading ? `<span class="diff-removed">${previousChapterHeading}</span> ` : ''}
+            <span class="diff-added">${chapter.heading}</span>
+          </h3>`
+        : `<h3 class="chapter-heading">${chapterNumber} ${chapter.heading}</h3>`
+
       return `
         <div class="chapter ${pageBreakClass}" id="chapter-${chapter.id}">
-          <h3 class="chapter-heading">${chapterNumber} ${chapter.heading}</h3>
+          ${headingHtml}
 
           ${contentBlocks
             .map(
-              (block: any) => `
-            <div class="chapter-content">${block.content || ''}</div>
-          `
+              (block: any) => {
+                // Extract HTML content from JSONB structure
+                const htmlContent = block.content?.html || block.content || ''
+
+                // If diff mode, show changes
+                if (exportType === 'diff' && previousChapterContent) {
+                  // Simple diff: If content changed, show both versions
+                  if (previousChapterContent !== htmlContent) {
+                    return `
+                      <div class="chapter-content">
+                        ${previousChapterContent ? `<div class="diff-removed">${previousChapterContent}</div>` : ''}
+                        <div class="diff-added">${htmlContent}</div>
+                      </div>
+                    `
+                  }
+                }
+
+                return `<div class="chapter-content">${htmlContent}</div>`
+              }
             )
             .join('')}
 

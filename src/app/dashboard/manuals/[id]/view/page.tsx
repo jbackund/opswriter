@@ -28,7 +28,10 @@ export default async function ViewManualPage({ params }: PageProps) {
     .from('manuals')
     .select(`
       *,
-      chapters(*)
+      chapters(
+        *,
+        content_blocks(*)
+      )
     `)
     .eq('id', id)
     .single()
