@@ -73,29 +73,29 @@
 - [x] Build activity feed per manual summarizing recent changes
 
 ## 12. Search & Discovery
-- [ ] Implement global search across manuals, chapters, definitions, abbreviations with filters
-- [ ] Add in-manual search with highlighted results
+- [x] Implement global search across manuals, chapters, definitions, abbreviations with filters
+- [x] Add in-manual search with highlighted results
 
 ## 13. Administration & Settings
-- [ ] Provide SysAdmin console for user invitations, deactivation, and role toggles
-- [ ] Build organization settings (branding, export footer text, reference categories)
-- [ ] Deliver audit log reporting with advanced filters and CSV export
+- [x] Provide SysAdmin console for user invitations, deactivation, and role toggles
+- [x] Build organization settings (branding, export footer text, reference categories)
+- [x] Deliver audit log reporting with advanced filters and CSV export
 
 ## 14. Analytics & Reporting
-- [ ] Instrument key funnels (login success, manual creation, export completion)
-- [ ] Track editor actions (revision saves, change summaries, rollbacks)
-- [ ] Capture review workflow KPIs (time in review, approval rate, rejection reasons)
+- [x] Instrument key funnels (login success, manual creation, export completion)
+- [x] Track editor actions (revision saves, change summaries, rollbacks)
+- [x] Capture review workflow KPIs (time in review, approval rate, rejection reasons)
 
 ## 15. Infrastructure & Operations
-- [ ] Configure background job strategy (Supabase Functions or external queue) for heavy PDF tasks
-- [ ] Set up automated backups and retention policies in Supabase (indefinite revision history)
-- [ ] Establish monitoring/alerting (Supabase logs, Vercel analytics, email delivery status)
+- [x] Configure background job strategy (Supabase Functions or external queue) for heavy PDF tasks
+- [x] Set up automated backups and retention policies in Supabase (indefinite revision history)
+- [x] Establish monitoring/alerting (Supabase logs, Vercel analytics, email delivery status)
 
 ## 16. QA & Compliance
 - [ ] Develop test plan covering unit, integration, end-to-end (critical flows: editing, review, exports)
 - [ ] Generate sample data/manuals for UAT and PDF baseline comparisons
 - [ ] Perform accessibility audit (WCAG 2.1 AA) on dashboard, editor, exports selection
-- [ ] Validate security controls (role enforcement, audit log immutability, storage permissions)
+- [x] Validate security controls (role enforcement, audit log immutability, storage permissions)
 
 ## 17. Documentation & Launch Prep
 - [ ] Document user guides (manual creation, review workflow, exporting)

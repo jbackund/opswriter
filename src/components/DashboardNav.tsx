@@ -12,7 +12,8 @@ import {
   LogOut,
   Home,
   BookOpen,
-  FileCheck
+  FileCheck,
+  BarChart3
 } from 'lucide-react'
 
 export default function DashboardNav() {
@@ -51,6 +52,7 @@ export default function DashboardNav() {
     { name: 'Definitions', href: '/dashboard/definitions', icon: BookOpen, requiresAdmin: false },
     { name: 'Abbreviations', href: '/dashboard/abbreviations', icon: FileCheck, requiresAdmin: false },
     { name: 'Export Jobs', href: '/dashboard/exports', icon: FileText, requiresAdmin: false },
+    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, requiresAdmin: false },
     { name: 'Users', href: '/dashboard/users', icon: Users, requiresAdmin: true },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings, requiresAdmin: false },
   ].filter(item => !item.requiresAdmin || userRole === 'sysadmin')
