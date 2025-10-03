@@ -10,6 +10,7 @@ import DiffViewer from './DiffViewer'
 import RestoreModal from './RestoreModal'
 import AuditTrail from './AuditTrail'
 import ExportButton from './ExportButton'
+import ManualReferencesSelector from './ManualReferencesSelector'
 import {
   Save,
   Plus,
@@ -21,6 +22,7 @@ import {
   FileText,
   Settings,
   Book,
+  BookOpen,
   Loader2,
   AlertCircle,
   Check,
@@ -72,6 +74,12 @@ interface Manual {
     email: string
   }
   chapters: Chapter[]
+  revisions?: Array<{
+    id: string
+    revision_number: string
+    status: string
+    created_at: string
+  }>
 }
 
 interface ManualEditorProps {
@@ -109,7 +117,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null)
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'audit'>('editor')
+  const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'audit' | 'references'>('editor')
 
   // Revision viewing state
   const [viewingRevision, setViewingRevision] = useState<any>(null)
@@ -117,7 +125,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   const [restoringRevision, setRestoringRevision] = useState<any>(null)
 
   const normalizedManualStatus = typeof manual.status === 'string' ? manual.status.toLowerCase() : manual.status
-  const isReadOnly = readOnly || normalizedManualStatus === 'in_review' || normalizedManualStatus === 'approved'
+  const isReadOnly = readOnly || normalizedManualStatus === 'in_review'
   const statusBadgeClass = (() => {
     switch (normalizedManualStatus) {
       case 'draft':
@@ -965,10 +973,35 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                   <Hash className="h-3 w-3 mr-1" />
                   {manual.manual_code}
                 </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  <GitBranch className="h-3 w-3" />
-                  Rev {manual.current_revision}
-                </span>
+                {(() => {
+                  // Find the latest draft revision if exists
+                  const draftRevision = manual.revisions?.find(r => r.status === 'draft')
+                  const approvedRevision = manual.revisions?.find(r => r.status === 'approved')
+
+                  if (normalizedManualStatus === 'draft' && draftRevision && approvedRevision) {
+                    // Show both approved and draft revision
+                    return (
+                      <>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <Check className="h-3 w-3" />
+                          Rev {approvedRevision.revision_number} (Approved)
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                          <Edit3 className="h-3 w-3" />
+                          Rev {draftRevision.revision_number} (Draft)
+                        </span>
+                      </>
+                    )
+                  }
+
+                  // Default: show current revision
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      <GitBranch className="h-3 w-3" />
+                      Rev {manual.current_revision}
+                    </span>
+                  )
+                })()}
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadgeClass}`}>
                   {typeof manual.status === 'string' ? manual.status.replace('_', ' ').toUpperCase() : manual.status}
                 </span>
@@ -1052,7 +1085,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
         </div>
       )}
 
-      {/* Read-only banner */}
+      {/* Status banners */}
       {isReadOnly && (
         <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
           <div className="flex items-center">
@@ -1069,6 +1102,32 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
           </div>
         </div>
       )}
+
+      {/* Draft revision banner */}
+      {!isReadOnly && normalizedManualStatus === 'draft' && (() => {
+        const draftRevision = manual.revisions?.find(r => r.status === 'draft')
+        const approvedRevision = manual.revisions?.find(r => r.status === 'approved')
+
+        if (draftRevision && approvedRevision) {
+          return (
+            <div className="px-6 py-3 bg-amber-50 border-b border-amber-200">
+              <div className="flex items-center">
+                <GitBranch className="h-5 w-5 text-amber-600 mr-2" />
+                <div>
+                  <p className="text-sm font-medium text-amber-900">
+                    Working on Draft Revision {draftRevision.revision_number}
+                  </p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    This is a draft based on approved revision {approvedRevision.revision_number}.
+                    Changes will not affect the approved version until this draft is reviewed and approved.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )
+        }
+        return null
+      })()}
 
       {/* Tabs */}
       <div className="border-b bg-white px-6">
@@ -1105,6 +1164,17 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
           >
             <Shield className="h-4 w-4" />
             Audit Trail
+          </button>
+          <button
+            onClick={() => setActiveTab('references')}
+            className={`py-4 px-1 inline-flex items-center gap-2 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'references'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <BookOpen className="h-4 w-4" />
+            References
           </button>
         </nav>
       </div>
@@ -1281,6 +1351,19 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
         {activeTab === 'audit' && (
           <div className="flex-1 p-6 overflow-y-auto bg-gray-50">
             <AuditTrail manualId={manual.id} />
+          </div>
+        )}
+
+        {/* References Tab */}
+        {activeTab === 'references' && (
+          <div className="flex-1 p-6 overflow-y-auto bg-gray-50">
+            <ManualReferencesSelector
+              manualId={manual.id}
+              organizationName={manual.organization_name}
+              onUpdate={() => {
+                // Optionally refresh something after reference updates
+              }}
+            />
           </div>
         )}
       </div>

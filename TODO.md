@@ -63,10 +63,10 @@
 - [x] Cache and store exports with 30-day retention and access control
 
 ## 10. Reference Management
-- [ ] Create sidebar reference pages for definitions and abbreviations CRUD
-- [ ] Implement manual-level selection UI for which references to include
-- [ ] Update exports to surface selected references only
-- [ ] Add search filters for references and inclusion status
+- [x] Create sidebar reference pages for definitions and abbreviations CRUD
+- [x] Implement manual-level selection UI for which references to include
+- [x] Update exports to surface selected references only
+- [x] Add search filters for references and inclusion status
 
 ## 11. Notifications & Activity
 - [ ] Wire Resend emails for review requests, approvals, rejections, manual assignments

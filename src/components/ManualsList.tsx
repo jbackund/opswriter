@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Copy,
   Loader2,
+  GitBranch,
 } from 'lucide-react'
 
 interface UserProfile {
@@ -237,6 +238,52 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
       setActionFeedback({
         type: 'error',
         message: error?.message || 'Failed to submit manual for review',
+      })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleStartNextRevision = async (manual: Manual) => {
+    if (!confirm(`Start a new revision for "${manual.title}"? This will create a draft of the next revision based on the current approved version.`)) {
+      return
+    }
+
+    try {
+      setActionLoading(manual.id)
+      setActionFeedback(null)
+
+      const response = await fetch(`/api/manuals/${manual.id}/create-revision`, {
+        method: 'POST',
+      })
+
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to create new revision')
+      }
+
+      // Update the manual status to draft and increment revision
+      setManuals(prev =>
+        prev.map(item =>
+          item.id === manual.id
+            ? {
+                ...item,
+                status: 'draft',
+                current_revision: payload.newRevisionNumber || item.current_revision
+              }
+            : item
+        )
+      )
+
+      setActionFeedback({
+        type: 'success',
+        message: `New revision ${payload.newRevisionNumber} started for "${manual.title}". You can now edit the draft.`,
+      })
+    } catch (error: any) {
+      setActionFeedback({
+        type: 'error',
+        message: error?.message || 'Failed to create new revision',
       })
     } finally {
       setActionLoading(null)
@@ -531,6 +578,18 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
                                   title="Export PDF"
                                 >
                                   <Download className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleStartNextRevision(manual)}
+                                  className={`text-docgen-blue hover:opacity-90 ${actionLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
+                                  title="Start Next Revision"
+                                  disabled={actionLoading === manual.id}
+                                >
+                                  {actionLoading === manual.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <GitBranch className="h-4 w-4" />
+                                  )}
                                 </button>
                               </>
                             )}

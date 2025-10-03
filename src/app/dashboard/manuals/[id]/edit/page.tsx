@@ -20,7 +20,7 @@ export default async function EditManualPage({ params }: PageProps) {
     redirect('/login')
   }
 
-  // Get the manual with all related data
+  // Get the manual with all related data including revisions
   const {
     data: manual,
     error: manualError,
@@ -28,7 +28,13 @@ export default async function EditManualPage({ params }: PageProps) {
     .from('manuals')
     .select(`
       *,
-      chapters(*)
+      chapters(*),
+      revisions(
+        id,
+        revision_number,
+        status,
+        created_at
+      )
     `)
     .eq('id', id)
     .single()
