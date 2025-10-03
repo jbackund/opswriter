@@ -38,7 +38,7 @@ export async function GET(
       .from('audit_logs')
       .select(`
         *,
-        user:user_profiles(full_name, email)
+        user:user_profiles!audit_logs_user_id_fkey(full_name, email)
       `, { count: 'exact' })
       .eq('entity_id', manualId)
       .order('created_at', { ascending: false })

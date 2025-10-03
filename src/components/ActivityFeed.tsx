@@ -23,7 +23,7 @@ interface Activity {
   actor_id: string
   created_at: string
   metadata: any
-  actor?: {
+  user?: {
     full_name: string
     email: string
   }
@@ -63,7 +63,7 @@ export default function ActivityFeed({
             actor_id,
             created_at,
             metadata,
-            actor:user_profiles!audit_logs_actor_id_fkey(
+            user:user_profiles!audit_logs_user_id_fkey(
               full_name,
               email
             )
@@ -160,7 +160,7 @@ export default function ActivityFeed({
   }
 
   const getActivityMessage = (activity: Activity) => {
-    const actorName = activity.actor?.full_name || activity.actor?.email || 'Unknown user'
+    const actorName = activity.user?.full_name || activity.user?.email || 'Unknown user'
     const metadata = activity.metadata || {}
 
     switch (activity.action) {

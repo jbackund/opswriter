@@ -74,6 +74,26 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Add user_id column for joining with user_profiles table
+ALTER TABLE audit_logs
+ADD COLUMN IF NOT EXISTS user_id UUID;
+
+-- Add foreign key constraint to user_profiles
+ALTER TABLE audit_logs
+ADD CONSTRAINT audit_logs_user_id_fkey
+FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE SET NULL;
+
+-- Create index for join performance
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+
+-- Backfill user_id from actor_id by matching with user_profiles
+-- This assumes user_profiles.id matches auth.users.id (which it does based on the FK)
+UPDATE audit_logs
+SET user_id = actor_id
+WHERE actor_id IS NOT NULL AND user_id IS NULL;
+
 -- Add comments explaining the schema
+COMMENT ON COLUMN audit_logs.actor_id IS 'References auth.users.id - the authenticated user who performed the action';
+COMMENT ON COLUMN audit_logs.user_id IS 'References user_profiles.id - for joining with user profile information. Same as actor_id but allows direct joins with user_profiles table.';
 COMMENT ON COLUMN audit_logs.actor_email IS 'Denormalized email for audit trail immutability, even if user is deleted';
 COMMENT ON COLUMN audit_logs.metadata IS 'Flexible JSONB field for action-specific context and details';
