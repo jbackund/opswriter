@@ -124,10 +124,11 @@ npx supabase gen types typescript --project-id mjpmvthvroflooywoyss > types/supa
 
 #### Database Migration Best Practices:
 1. **Always sync before migrations**: Run `npx supabase db pull` before creating new migrations
-2. **Use proper timestamps**: Format migrations as `YYYYMMDDHHMMSS_description.sql`
-3. **Test locally first**: Use `npx supabase db reset` to test migrations locally if possible
-4. **Handle RLS policies**: Include RLS policies in migrations when creating tables
-5. **Storage buckets**: Create storage buckets and policies via migrations or using the Supabase dashboard SQL editor
+2. **Verify sync after migrations**: **CRITICAL** - After any migration is performed, ALWAYS verify that remote and local migration history are in sync using `npx supabase migration list --linked`. If out of sync, immediately use the database-agent to repair the migration history
+3. **Use proper timestamps**: Format migrations as `YYYYMMDDHHMMSS_description.sql`
+4. **Test locally first**: Use `npx supabase db reset` to test migrations locally if possible
+5. **Handle RLS policies**: Include RLS policies in migrations when creating tables
+6. **Storage buckets**: Create storage buckets and policies via migrations or using the Supabase dashboard SQL editor
 
 #### When Supabase CLI Cannot Apply Migrations:
 If the CLI cannot apply migrations (read-only mode or sync issues), use the Supabase SQL Editor:
