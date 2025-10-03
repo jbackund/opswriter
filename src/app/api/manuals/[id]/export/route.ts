@@ -167,14 +167,22 @@ export async function POST(
       )
     }
 
+    // Get signed URL for download
+    const { data: signedUrlData } = await supabase.storage
+      .from('exports')
+      .createSignedUrl(uploadData.path, 3600) // 1 hour
+
     // Record export job
     const { data: exportJob, error: exportError } = await supabase
       .from('export_jobs')
       .insert({
         manual_id: manualId,
-        export_type: exportType,
+        variant: exportType,  // Changed from export_type to variant
+        status: 'completed',  // Added required status field
         file_path: uploadData.path,
-        generated_by: user.id,
+        file_url: signedUrlData?.signedUrl || null,  // Added file_url for easier access
+        created_by: user.id,  // Changed from generated_by to created_by
+        processing_completed_at: new Date().toISOString(),  // Mark as completed
         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
       })
       .select()
@@ -183,11 +191,6 @@ export async function POST(
     if (exportError) {
       console.error('Error recording export job:', exportError)
     }
-
-    // Get signed URL for download
-    const { data: signedUrlData } = await supabase.storage
-      .from('exports')
-      .createSignedUrl(uploadData.path, 3600) // 1 hour
 
     return NextResponse.json({
       success: true,

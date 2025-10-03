@@ -552,6 +552,72 @@ export type Database = {
         }
         Relationships: []
       }
+      organization_settings: {
+        Row: {
+          auto_increment_revision: boolean
+          created_at: string
+          default_review_days: number
+          footer_text: string | null
+          id: string
+          logo_url: string | null
+          organization_name: string
+          primary_color: string
+          secondary_color: string
+          updated_at: string
+        }
+        Insert: {
+          auto_increment_revision?: boolean
+          created_at?: string
+          default_review_days?: number
+          footer_text?: string | null
+          id?: string
+          logo_url?: string | null
+          organization_name: string
+          primary_color?: string
+          secondary_color?: string
+          updated_at?: string
+        }
+        Update: {
+          auto_increment_revision?: boolean
+          created_at?: string
+          default_review_days?: number
+          footer_text?: string | null
+          id?: string
+          logo_url?: string | null
+          organization_name?: string
+          primary_color?: string
+          secondary_color?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      reference_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          display_order: number
+          id: string
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          display_order: number
+          id?: string
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
       revisions: {
         Row: {
           approved_at: string | null

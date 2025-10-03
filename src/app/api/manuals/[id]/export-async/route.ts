@@ -42,9 +42,9 @@ export async function POST(
       .from('export_jobs')
       .insert({
         manual_id: manualId,
-        export_type: exportType,
+        variant: exportType,  // Changed from export_type to variant
         status: 'pending',
-        generated_by: user.id,
+        created_by: user.id,  // Changed from generated_by to created_by
         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
       })
       .select()
@@ -77,7 +77,7 @@ export async function POST(
         .update({
           status: 'failed',
           error_message: 'Failed to start PDF generation',
-          completed_at: new Date().toISOString(),
+          processing_completed_at: new Date().toISOString(),  // Changed from completed_at
         })
         .eq('id', job.id)
 
@@ -145,7 +145,7 @@ export async function GET(
     }
 
     // Check if user has permission to view this job
-    if (job.generated_by !== user.id) {
+    if (job.created_by !== user.id) {  // Changed from generated_by to created_by
       const { data: userProfile } = await supabase
         .from('user_profiles')
         .select('role')
@@ -157,10 +157,10 @@ export async function GET(
       }
     }
 
-    // If job is completed and has a download URL, return it
-    if (job.status === 'completed' && job.download_url) {
+    // If job is completed and has a file URL, return it
+    if (job.status === 'completed' && job.file_url) {  // Changed from download_url to file_url
       // Generate a fresh signed URL if the existing one is expired
-      const urlExpired = job.download_url && new URL(job.download_url).searchParams.get('expires')
+      const urlExpired = job.file_url && new URL(job.file_url).searchParams.get('expires')
       if (urlExpired && new Date(urlExpired) < new Date()) {
         const { data: signedUrlData } = await supabase.storage
           .from('manual-exports')
@@ -170,19 +170,19 @@ export async function GET(
           // Update job with new URL
           await supabase
             .from('export_jobs')
-            .update({ download_url: signedUrlData.signedUrl })
+            .update({ file_url: signedUrlData.signedUrl })  // Changed from download_url to file_url
             .eq('id', jobId)
 
-          job.download_url = signedUrlData.signedUrl
+          job.file_url = signedUrlData.signedUrl  // Changed from download_url to file_url
         }
       }
 
       return NextResponse.json({
         jobId: job.id,
         status: job.status,
-        downloadUrl: job.download_url,
+        downloadUrl: job.file_url,  // Changed from download_url to file_url
         fileName: job.file_path?.split('/').pop() || 'export.pdf',
-        completedAt: job.completed_at,
+        completedAt: job.processing_completed_at,  // Changed from completed_at to processing_completed_at
         fileSizeBytes: job.file_size_bytes,
       })
     }
@@ -192,8 +192,8 @@ export async function GET(
       jobId: job.id,
       status: job.status,
       errorMessage: job.error_message,
-      startedAt: job.started_at,
-      completedAt: job.completed_at,
+      startedAt: job.processing_started_at,  // Changed from started_at to processing_started_at
+      completedAt: job.processing_completed_at,  // Changed from completed_at to processing_completed_at
     })
   } catch (error) {
     console.error('Job status check error:', error)

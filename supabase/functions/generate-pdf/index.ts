@@ -194,7 +194,7 @@ serve(async (req) => {
       .update({
         status: 'failed',
         error_message: error.message,
-        completed_at: new Date().toISOString(),
+        processing_completed_at: new Date().toISOString(),  // Changed from completed_at to processing_completed_at
       })
       .eq('id', payload.jobId)
 
