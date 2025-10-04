@@ -260,6 +260,3 @@ export default function SecuritySettings({ userRole }: SecuritySettingsProps) {
     </div>
   )
 }
-
-// Import icons that might be missing
-import { Plus, Edit2, Trash2 } from 'lucide-react'

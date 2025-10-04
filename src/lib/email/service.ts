@@ -4,8 +4,32 @@
 import { Resend } from 'resend'
 import { config } from '@/lib/config/environment'
 
-// Initialize Resend with API key
-const resend = new Resend(config.email.resendApiKey)
+export interface EmailResult {
+  success: boolean
+  data?: unknown
+  error?: unknown
+  skipped?: boolean
+  message?: string
+}
+
+let resendClient: Resend | null | undefined
+
+const getResendClient = (): Resend | null => {
+  if (resendClient !== undefined) {
+    return resendClient
+  }
+
+  const apiKey = config.email.resendApiKey
+
+  if (!apiKey) {
+    console.warn('Resend API key not configured. Email delivery disabled.')
+    resendClient = null
+    return resendClient
+  }
+
+  resendClient = new Resend(apiKey)
+  return resendClient
+}
 
 export interface EmailOptions {
   to: string | string[]
@@ -35,9 +59,17 @@ export interface EmailData {
 export async function sendReviewRequestEmail(
   options: EmailOptions,
   data: EmailData
-) {
+) : Promise<EmailResult> {
   const { to, cc, bcc, replyTo } = options
   const subject = `Review Request: ${data.manualTitle} (Rev ${data.manualRevision})`
+
+  const client = getResendClient()
+
+  if (!client) {
+    const message = 'Skipped review request email because Resend API key is missing.'
+    console.warn(message, { to })
+    return { success: false, skipped: true, message }
+  }
 
   const html = `
     <!DOCTYPE html>
@@ -85,7 +117,7 @@ export async function sendReviewRequestEmail(
   `
 
   try {
-    const response = await resend.emails.send({
+    const response = await client.emails.send({
       from: `${config.email.fromName} <${config.email.fromAddress}>`,
       to: Array.isArray(to) ? to : [to],
       cc,
@@ -108,9 +140,17 @@ export async function sendReviewRequestEmail(
 export async function sendApprovalEmail(
   options: EmailOptions,
   data: EmailData
-) {
+) : Promise<EmailResult> {
   const { to, cc, bcc, replyTo } = options
   const subject = `✅ Approved: ${data.manualTitle} (Rev ${data.manualRevision})`
+
+  const client = getResendClient()
+
+  if (!client) {
+    const message = 'Skipped approval email because Resend API key is missing.'
+    console.warn(message, { to })
+    return { success: false, skipped: true, message }
+  }
 
   const html = `
     <!DOCTYPE html>
@@ -160,7 +200,7 @@ export async function sendApprovalEmail(
   `
 
   try {
-    const response = await resend.emails.send({
+    const response = await client.emails.send({
       from: `${config.email.fromName} <${config.email.fromAddress}>`,
       to: Array.isArray(to) ? to : [to],
       cc,
@@ -183,9 +223,17 @@ export async function sendApprovalEmail(
 export async function sendRejectionEmail(
   options: EmailOptions,
   data: EmailData
-) {
+) : Promise<EmailResult> {
   const { to, cc, bcc, replyTo } = options
   const subject = `❌ Rejected: ${data.manualTitle} (Rev ${data.manualRevision})`
+
+  const client = getResendClient()
+
+  if (!client) {
+    const message = 'Skipped rejection email because Resend API key is missing.'
+    console.warn(message, { to })
+    return { success: false, skipped: true, message }
+  }
 
   const html = `
     <!DOCTYPE html>
@@ -241,7 +289,7 @@ export async function sendRejectionEmail(
   `
 
   try {
-    const response = await resend.emails.send({
+    const response = await client.emails.send({
       from: `${config.email.fromName} <${config.email.fromAddress}>`,
       to: Array.isArray(to) ? to : [to],
       cc,
@@ -264,9 +312,17 @@ export async function sendRejectionEmail(
 export async function sendAssignmentEmail(
   options: EmailOptions,
   data: EmailData & { previousOwner?: string }
-) {
+) : Promise<EmailResult> {
   const { to, cc, bcc, replyTo } = options
   const subject = `📝 Manual Assignment: ${data.manualTitle}`
+
+  const client = getResendClient()
+
+  if (!client) {
+    const message = 'Skipped assignment email because Resend API key is missing.'
+    console.warn(message, { to })
+    return { success: false, skipped: true, message }
+  }
 
   const html = `
     <!DOCTYPE html>
@@ -315,7 +371,7 @@ export async function sendAssignmentEmail(
   `
 
   try {
-    const response = await resend.emails.send({
+    const response = await client.emails.send({
       from: `${config.email.fromName} <${config.email.fromAddress}>`,
       to: Array.isArray(to) ? to : [to],
       cc,
@@ -337,11 +393,19 @@ export async function sendAssignmentEmail(
  */
 export async function sendCustomEmail(
   options: EmailOptions & { subject: string; html: string; text?: string }
-) {
+) : Promise<EmailResult> {
   const { to, cc, bcc, replyTo, subject, html, text, attachments } = options
 
+  const client = getResendClient()
+
+  if (!client) {
+    const message = 'Skipped custom email because Resend API key is missing.'
+    console.warn(message, { to, subject })
+    return { success: false, skipped: true, message }
+  }
+
   try {
-    const response = await resend.emails.send({
+    const response = await client.emails.send({
       from: `${config.email.fromName} <${config.email.fromAddress}>`,
       to: Array.isArray(to) ? to : [to],
       cc,

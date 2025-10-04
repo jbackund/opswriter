@@ -74,21 +74,30 @@ export async function POST(
     )
   }
 
-  const { data: nextApprovedNumber, error: nextApprovedError } = await supabase
-    .rpc('get_next_revision_number', {
+  let approvedRevisionNumber = currentRevisionNumber
+
+  if (!approvedRevisionNumber || approvedRevisionNumber.includes('.')) {
+    const {
+      data: normalizedRevisionNumber,
+      error: normalizedRevisionError,
+    } = await supabase.rpc('get_next_revision_number', {
       p_manual_id: manualId,
-      p_is_draft: false,
+      p_is_draft: true,
     })
 
-  if (nextApprovedError) {
-    console.error('Error generating approved revision number', nextApprovedError)
-    return NextResponse.json(
-      { error: 'Failed to determine approved revision number' },
-      { status: 500 }
-    )
-  }
+    if (normalizedRevisionError || !normalizedRevisionNumber) {
+      console.error(
+        'Error normalizing approved revision number',
+        normalizedRevisionError
+      )
+      return NextResponse.json(
+        { error: 'Failed to determine approved revision number' },
+        { status: 500 }
+      )
+    }
 
-  const approvedRevisionNumber = nextApprovedNumber as string
+    approvedRevisionNumber = normalizedRevisionNumber as string
+  }
 
   const now = new Date().toISOString()
 

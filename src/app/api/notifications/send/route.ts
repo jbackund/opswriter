@@ -9,7 +9,7 @@ import {
   sendRejectionEmail,
   sendAssignmentEmail,
 } from '@/lib/email/service'
-import type { EmailOptions, EmailData } from '@/lib/email/service'
+import type { EmailOptions, EmailData, EmailResult } from '@/lib/email/service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Send appropriate email based on type
-    let result
+    let result: EmailResult
     switch (type) {
       case 'review_request':
         result = await sendReviewRequestEmail(emailOptions, emailData)
@@ -112,10 +112,12 @@ export async function POST(request: NextRequest) {
         recipients: recipientUsers.map(u => u.email),
         manual_title: data.manualTitle,
         success: result.success,
+        skipped: Boolean(result.skipped),
+        message: result.message,
       },
     })
 
-    if (!result.success) {
+    if (!result.success && !result.skipped) {
       return NextResponse.json(
         { error: 'Failed to send notification' },
         { status: 500 }
@@ -124,7 +126,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Notification sent successfully',
+      skipped: Boolean(result.skipped),
+      message: result.skipped
+        ? 'Notification skipped because email delivery is disabled.'
+        : 'Notification sent successfully',
       data: result.data,
     })
   } catch (error) {

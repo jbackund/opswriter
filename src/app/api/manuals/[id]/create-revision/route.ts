@@ -124,6 +124,7 @@ export async function POST(
     .from('manuals')
     .update({
       status: 'draft',
+      current_revision: newRevisionNumber,
       updated_at: new Date().toISOString(),
       updated_by: user.id,
     })

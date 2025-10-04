@@ -557,43 +557,27 @@ CREATE POLICY "Users can view own audit logs" ON audit_logs FOR SELECT USING (us
 CREATE OR REPLACE FUNCTION get_next_revision_number(p_manual_id UUID, p_is_draft BOOLEAN DEFAULT true)
 RETURNS TEXT AS $$
 DECLARE
-  current_rev TEXT;
-  base_rev INTEGER;
-  draft_count INTEGER;
-  next_rev TEXT;
+  highest_base INTEGER;
 BEGIN
-  -- Get current approved revision
-  SELECT revision_number INTO current_rev
+  SELECT COALESCE(
+    MAX(
+      CASE
+        WHEN revision_number ~ '^[0-9]+$' THEN revision_number::INTEGER
+        WHEN revision_number ~ '^[0-9]+\.[0-9]+$' THEN SPLIT_PART(revision_number, '.', 1)::INTEGER
+        ELSE NULL
+      END
+    ),
+    0
+  )
+  INTO highest_base
   FROM revisions
-  WHERE manual_id = p_manual_id AND status = 'approved'
-  ORDER BY created_at DESC
-  LIMIT 1;
-
-  -- If no approved revision, start from 0
-  IF current_rev IS NULL THEN
-    IF p_is_draft THEN
-      RETURN '0.1';
-    ELSE
-      RETURN '0';
-    END IF;
-  END IF;
-
-  -- Parse base revision number
-  base_rev := CAST(SPLIT_PART(current_rev, '.', 1) AS INTEGER);
+  WHERE manual_id = p_manual_id;
 
   IF p_is_draft THEN
-    -- Count existing draft revisions for current base
-    SELECT COUNT(*) INTO draft_count
-    FROM revisions
-    WHERE manual_id = p_manual_id
-      AND revision_number LIKE (base_rev::TEXT || '.%')
-      AND status = 'draft';
-
-    RETURN base_rev::TEXT || '.' || (draft_count + 1)::TEXT;
-  ELSE
-    -- Next approved revision
-    RETURN (base_rev + 1)::TEXT;
+    RETURN (highest_base + 1)::TEXT;
   END IF;
+
+  RETURN highest_base::TEXT;
 END;
 $$ LANGUAGE plpgsql;
 

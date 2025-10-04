@@ -33,6 +33,43 @@ export default async function ManualsPage() {
         created_by_user: profilesMap[manual.created_by] || { full_name: 'Unknown', email: '' }
       }))
     }
+
+    const manualIds = manuals.map(m => m.id)
+    const { data: activeRevisions, error: revisionsError } = await supabase
+      .from('revisions')
+      .select('manual_id, revision_number, status, created_at')
+      .in('manual_id', manualIds)
+      .in('status', ['draft', 'in_review'])
+      .order('created_at', { ascending: false })
+
+    if (revisionsError) {
+      console.error('Error fetching active revision numbers:', revisionsError)
+    }
+
+    const activeRevisionMap = new Map<string, { revision_number: string; status: string }>()
+
+    if (activeRevisions) {
+      for (const rev of activeRevisions) {
+        if (!activeRevisionMap.has(rev.manual_id)) {
+          activeRevisionMap.set(rev.manual_id, {
+            revision_number: rev.revision_number,
+            status: rev.status,
+          })
+        }
+      }
+    }
+
+    enrichedManuals = enrichedManuals.map(manual => {
+      const activeRevision = activeRevisionMap.get(manual.id)
+      if (!activeRevision) {
+        return manual
+      }
+
+      return {
+        ...manual,
+        current_revision: activeRevision.revision_number,
+      }
+    })
   }
 
   return (
