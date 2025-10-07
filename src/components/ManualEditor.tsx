@@ -130,6 +130,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null)
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set())
   const [editingChapter, setEditingChapter] = useState<string | null>(null)
+  const [editingChapterTitle, setEditingChapterTitle] = useState('')
   const [chapterTitle, setChapterTitle] = useState('')
   const [chapterContent, setChapterContent] = useState('')
   const [regulatoryReferences, setRegulatoryReferences] = useState<string[]>([])
@@ -432,24 +433,35 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   }
 
   // Select chapter for editing
-  const selectChapter = (chapter: Chapter) => {
+  const selectChapter = async (chapter: Chapter) => {
+    if (!chapter) return
+
     // Save current chapter if changed
-    if (!isReadOnly && selectedChapter && (
+    if (!isReadOnly && selectedChapter && selectedChapter.id !== chapter.id && (
       chapterTitle !== selectedChapter.heading ||
       chapterContent !== getChapterContent(selectedChapter) ||
       pageBreakBefore !== selectedChapter.page_break ||
       !arraysEqual(regulatoryReferences, selectedChapter.regulatory_reference ?? [])
     )) {
-      saveChapter(false) // Not an autosave
+      await saveChapter(false) // Not an autosave
     }
 
-    setSelectedChapter(chapter)
-    setChapterTitle(chapter.heading)
-    setChapterContent(getChapterContent(chapter))
-    setPageBreakBefore(chapter.page_break)
-    setRegulatoryReferences(chapter.regulatory_reference ?? [])
+    const targetChapter =
+      chapters.find(ch => ch.id === chapter.id) ?? chapter
+
+    const chapterContentHtml = getChapterContent(targetChapter)
+    const references = Array.isArray(targetChapter.regulatory_reference)
+      ? [...targetChapter.regulatory_reference]
+      : []
+
+    setSelectedChapter(targetChapter)
+    setChapterTitle(targetChapter.heading)
+    setChapterContent(chapterContentHtml)
+    setPageBreakBefore(targetChapter.page_break)
+    setRegulatoryReferences(references)
     setNewRegulatoryReference('')
     setEditingChapter(null)
+    setEditingChapterTitle('')
     setHasUnsavedChanges(false)
   }
 
@@ -711,12 +723,6 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     const chapterToDelete = chapters.find(ch => ch.id === chapterId)
     if (!chapterToDelete) return
 
-    // Don't allow deleting Chapter 0
-    if (chapterToDelete.chapter_number === 0) {
-      setError('Chapter 0 cannot be deleted')
-      return
-    }
-
     // Check if chapter has children
     const hasChildren = chapters.some(ch => ch.parent_id === chapterId)
     if (hasChildren) {
@@ -745,7 +751,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       if (selectedChapter?.id === chapterId) {
         const chapter0 = chapters.find(ch => ch.chapter_number === 0)
         if (chapter0) {
-          selectChapter(chapter0)
+          void selectChapter(chapter0)
         }
       }
 
@@ -756,13 +762,13 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   }
 
   // Add to history (for undo/redo)
-  const addToHistory = (newChapters: Chapter[]) => {
+  const addToHistory = useCallback((newChapters: Chapter[]) => {
     // Remove any future history if we're not at the end
     const newHistory = chaptersHistory.slice(0, historyIndex + 1)
     newHistory.push(newChapters)
     setChaptersHistory(newHistory)
     setHistoryIndex(newHistory.length - 1)
-  }
+  }, [chaptersHistory, historyIndex])
 
   // Undo action
   const undo = () => {
@@ -783,6 +789,63 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       setSuccess('Redo successful')
     }
   }
+
+  const handleRenameCommit = useCallback(async (chapter: Chapter) => {
+    if (isReadOnly) {
+      setEditingChapter(null)
+      setEditingChapterTitle('')
+      return
+    }
+
+    const trimmedTitle = editingChapterTitle.trim()
+
+    if (!trimmedTitle) {
+      setEditingChapter(null)
+      setEditingChapterTitle('')
+      return
+    }
+
+    if (trimmedTitle === chapter.heading) {
+      setEditingChapter(null)
+      setEditingChapterTitle('')
+      return
+    }
+
+    setError(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('chapters')
+        .update({
+          heading: trimmedTitle,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', chapter.id)
+
+      if (updateError) throw updateError
+
+      setChapters(prev => {
+        const updated = prev.map(ch =>
+          ch.id === chapter.id ? { ...ch, heading: trimmedTitle } : ch
+        )
+        addToHistory(updated)
+        return updated
+      })
+
+      if (selectedChapter?.id === chapter.id) {
+        const updatedSelection = { ...selectedChapter, heading: trimmedTitle }
+        setSelectedChapter(updatedSelection)
+        setChapterTitle(trimmedTitle)
+      }
+
+      setEditingChapter(null)
+      setEditingChapterTitle('')
+      setSuccess('Chapter title updated')
+    } catch (error: any) {
+      setError(error.message || 'Failed to rename chapter')
+      setEditingChapter(chapter.id)
+    }
+  }, [addToHistory, editingChapterTitle, isReadOnly, selectedChapter, supabase])
 
   // Revision handlers
   const handleViewRevision = (revision: any) => {
@@ -1031,7 +1094,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
          <div
             className="flex-1 flex items-center ml-1"
-            onClick={() => selectChapter(chapter)}
+            onClick={() => void selectChapter(chapter)}
           >
             <span className="text-sm font-medium text-gray-500 mr-2">
               {getDisplayNumber(chapter)}
@@ -1039,16 +1102,20 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
             {isEditing ? (
               <input
                 type="text"
-                value={chapterTitle}
-                onChange={(e) => setChapterTitle(e.target.value)}
+                value={editingChapterTitle}
+                onChange={(e) => setEditingChapterTitle(e.target.value)}
                 onBlur={() => {
-                  saveChapter()
-                  setEditingChapter(null)
+                  void handleRenameCommit(chapter)
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    saveChapter()
+                    e.preventDefault()
+                    e.currentTarget.blur()
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
                     setEditingChapter(null)
+                    setEditingChapterTitle('')
                   }
                 }}
                 className="flex-1 text-sm border-b border-gray-300 focus:border-docgen-blue focus:outline-none"
@@ -1093,7 +1160,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                   onClick={(e) => {
                     e.stopPropagation()
                     setEditingChapter(chapter.id)
-                    setChapterTitle(chapter.heading)
+                    setEditingChapterTitle(chapter.heading)
                   }}
                   className="p-1 hover:bg-gray-200 rounded"
                   title="Rename"
@@ -1112,18 +1179,16 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                     <Plus className="h-3 w-3 text-gray-500" />
                   </button>
                 )}
-                {chapter.chapter_number !== 0 && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      deleteChapter(chapter.id)
-                    }}
-                    className="p-1 hover:bg-gray-200 rounded"
-                    title="Delete"
-                  >
-                    <Trash2 className="h-3 w-3 text-gray-500" />
-                  </button>
-                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    deleteChapter(chapter.id)
+                  }}
+                  className="p-1 hover:bg-gray-200 rounded"
+                  title="Delete"
+                >
+                  <Trash2 className="h-3 w-3 text-gray-500" />
+                </button>
               </>
             )}
           </div>
@@ -1501,92 +1566,120 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                 </div>
               </div>
               <div className="flex-1 p-6 overflow-y-auto">
-                <div className="max-w-4xl mx-auto">
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Regulatory References
-                    </label>
-                    {isReadOnly ? (
-                      regulatoryReferences.length > 0 ? (
-                        <ul className="space-y-2">
-                          {regulatoryReferences.map((ref, index) => (
-                            <li
-                              key={`${ref}-${index}`}
-                              className="text-sm text-gray-700 bg-gray-100 border border-gray-200 rounded-md px-3 py-2"
-                            >
-                              {ref}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="text-sm text-gray-500 bg-gray-100 border border-gray-200 rounded-md px-3 py-2">
-                          No regulatory references provided
-                        </div>
-                      )
-                    ) : (
-                      <>
-                        <div className="flex flex-wrap gap-2 mb-3 min-h-[2rem]">
-                          {regulatoryReferences.length > 0 ? (
-                            regulatoryReferences.map((ref, index) => (
-                              <span
-                                key={`${ref}-${index}`}
-                                className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 text-xs"
-                              >
-                                {ref}
-                                <button
-                                  type="button"
-                                  onClick={() => removeRegulatoryReference(index)}
-                                  className="ml-1 text-blue-600 hover:text-blue-800"
-                                  aria-label={`Remove ${ref}`}
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-gray-500">No references added yet</span>
+                <div className="w-full max-w-5xl space-y-6">
+                  <section className="bg-white border border-gray-200 rounded-xl shadow-sm">
+                    <div className="px-6 py-5">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900 tracking-wide uppercase">
+                            Regulatory References
+                          </h3>
+                          {!isReadOnly && (
+                            <p className="text-xs text-gray-500">
+                              Connect this chapter to the regulations that inform it.
+                            </p>
                           )}
                         </div>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="text"
-                            value={newRegulatoryReference}
-                            onChange={(e) => setNewRegulatoryReference(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                addRegulatoryReference()
-                              }
-                            }}
-                            placeholder="e.g. EASA Reg (EU) 965/2012 CAT.OP.MPA.160"
-                            className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-docgen-blue focus:ring-docgen-blue text-sm"
-                            spellCheck={false}
-                          />
-                          <button
-                            type="button"
-                            onClick={addRegulatoryReference}
-                            className="inline-flex items-center justify-center rounded-md bg-docgen-blue px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
-                            disabled={!newRegulatoryReference.trim()}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Add
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Chapter Content
-                  </label>
-                  <RichTextEditor
-                    content={chapterContent}
-                    onChange={setChapterContent}
-                    placeholder="Enter chapter content..."
-                    readOnly={isReadOnly}
-                  />
-                  <div className="mt-4 flex items-center text-sm text-gray-500">
-                    <span>Use the toolbar above to format your content. Tables, images, and links are supported.</span>
-                  </div>
+                        {isReadOnly && (
+                          <span className="text-xs font-medium text-gray-500">Read-only snapshot</span>
+                        )}
+                      </div>
+                      <div className="mt-4">
+                        {isReadOnly ? (
+                          regulatoryReferences.length > 0 ? (
+                            <ul className="grid gap-2 sm:grid-cols-2">
+                              {regulatoryReferences.map((ref, index) => (
+                                <li
+                                  key={`${ref}-${index}`}
+                                  className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
+                                >
+                                  {ref}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <div className="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg px-3 py-2">
+                              No regulatory references provided
+                            </div>
+                          )
+                        ) : (
+                          <>
+                            <div className="flex flex-wrap gap-2 min-h-[2rem]">
+                              {regulatoryReferences.length > 0 ? (
+                                regulatoryReferences.map((ref, index) => (
+                                  <span
+                                    key={`${ref}-${index}`}
+                                    className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 text-xs"
+                                  >
+                                    {ref}
+                                    <button
+                                      type="button"
+                                      onClick={() => removeRegulatoryReference(index)}
+                                      className="ml-1 text-blue-600 hover:text-blue-800"
+                                      aria-label={`Remove ${ref}`}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-xs text-gray-500">No references added yet</span>
+                              )}
+                            </div>
+                            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                              <input
+                                type="text"
+                                value={newRegulatoryReference}
+                                onChange={(e) => setNewRegulatoryReference(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    addRegulatoryReference()
+                                  }
+                                }}
+                                placeholder="e.g. EASA Reg (EU) 965/2012 CAT.OP.MPA.160"
+                                className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-docgen-blue focus:ring-docgen-blue text-sm"
+                                spellCheck={false}
+                              />
+                              <button
+                                type="button"
+                                onClick={addRegulatoryReference}
+                                className="inline-flex items-center justify-center rounded-md bg-docgen-blue px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
+                                disabled={!newRegulatoryReference.trim()}
+                              >
+                                <Plus className="h-4 w-4 mr-1" />
+                                Add
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="bg-white border border-gray-200 rounded-xl shadow-sm">
+                    <div className="px-6 py-5">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-gray-900 tracking-wide uppercase">
+                          Chapter Content
+                        </h3>
+                        {isReadOnly && (
+                          <span className="text-xs font-medium text-gray-500">Read-only</span>
+                        )}
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <RichTextEditor
+                          content={chapterContent}
+                          onChange={setChapterContent}
+                          placeholder="Enter chapter content..."
+                          readOnly={isReadOnly}
+                        />
+                        <p className="text-xs text-gray-500">
+                          Use the toolbar above to format your content. Tables, images, and links are supported.
+                        </p>
+                      </div>
+                    </div>
+                  </section>
                 </div>
               </div>
             </>

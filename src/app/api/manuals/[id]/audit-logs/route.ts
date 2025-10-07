@@ -40,7 +40,7 @@ export async function GET(
         *,
         user:user_profiles!audit_logs_user_id_fkey(full_name, email)
       `, { count: 'exact' })
-      .eq('entity_id', manualId)
+      .eq('manual_id', manualId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 

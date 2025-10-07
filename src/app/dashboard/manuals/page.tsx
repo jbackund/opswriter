@@ -6,6 +6,27 @@ import ManualsList from '@/components/ManualsList'
 export default async function ManualsPage() {
   const supabase = await createClient()
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  let canDeleteManuals = false
+  if (user) {
+    const { data: currentProfile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('Error fetching current user profile:', profileError)
+    }
+
+    if (currentProfile?.role === 'sysadmin') {
+      canDeleteManuals = true
+    }
+  }
+
   // Get all manuals
   const { data: manuals, error } = await supabase
     .from('manuals')
@@ -92,7 +113,7 @@ export default async function ManualsPage() {
         </div>
       </div>
 
-      <ManualsList initialManuals={enrichedManuals} />
+      <ManualsList initialManuals={enrichedManuals} canDelete={canDeleteManuals} />
     </div>
   )
 }

@@ -134,10 +134,33 @@ export const rateLimiters = {
     maxRequests: 5,
   }),
 
-  // Export operations: 10 per hour
+  // Export operations: 40 per hour per authenticated session
   export: new RateLimiter({
     windowMs: 60 * 60 * 1000,
-    maxRequests: 10,
+    maxRequests: 40,
+    identifier: (req: NextRequest) => {
+      const supabaseSession = req.cookies.getAll().find(
+        cookie => cookie.name.startsWith('sb-') && cookie.name.endsWith('-access-token')
+      )
+
+      if (supabaseSession?.value) {
+        const tokenSignature =
+          supabaseSession.value.split('.')[2] ||
+          supabaseSession.value.slice(Math.max(0, supabaseSession.value.length - 32))
+        return `export:user:${tokenSignature}`
+      }
+
+      const forwardedFor = req.headers.get('x-forwarded-for')
+      const realIp = req.headers.get('x-real-ip')
+      const ip = forwardedFor?.split(',')[0]?.trim() || realIp || 'unknown'
+      const pathSegments = req.nextUrl.pathname.split('/').filter(Boolean)
+      const manualsIndex = pathSegments.indexOf('manuals')
+      const manualId =
+        manualsIndex !== -1 && manualsIndex + 1 < pathSegments.length
+          ? pathSegments[manualsIndex + 1]
+          : pathSegments[pathSegments.length - 1] || 'unknown'
+      return `export:ip:${ip}:${manualId}`
+    },
   }),
 
   // Search operations: 30 per minute

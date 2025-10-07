@@ -41,7 +41,12 @@ export default function ExportButton({
       })
 
       if (!response.ok) {
-        throw new Error('Export failed')
+        const payload = await response.json().catch(() => ({}))
+        const message =
+          payload?.message ||
+          payload?.error ||
+          (response.status === 429 ? 'Too many export requests. Please wait a moment and try again.' : 'Export failed')
+        throw new Error(message)
       }
 
       const data = await response.json()
@@ -59,9 +64,9 @@ export default function ExportButton({
           document.body.removeChild(link)
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Export error:', err)
-      setError('Failed to generate PDF export. Please try again.')
+      setError(err?.message || 'Failed to generate PDF export. Please try again.')
     } finally {
       setIsExporting(false)
     }

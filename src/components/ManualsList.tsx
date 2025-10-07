@@ -16,6 +16,7 @@ import {
   Copy,
   Loader2,
   GitBranch,
+  Trash2,
 } from 'lucide-react'
 
 interface UserProfile {
@@ -40,13 +41,14 @@ interface Manual {
 
 interface ManualsListProps {
   initialManuals: Manual[]
+  canDelete?: boolean
 }
 
 type SortField = 'title' | 'manual_code' | 'current_revision' | 'status' | 'effective_date' | 'created_by_user' | 'updated_at'
 type SortDirection = 'asc' | 'desc'
 type StatusFilter = 'all' | 'draft' | 'in_review' | 'approved' | 'rejected'
 
-export default function ManualsList({ initialManuals }: ManualsListProps) {
+export default function ManualsList({ initialManuals, canDelete = false }: ManualsListProps) {
   const [manuals, setManuals] = useState<Manual[]>(initialManuals)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -344,10 +346,48 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
         type: 'success',
         message: `New revision ${payload.newRevisionNumber} started for "${manual.title}". You can now edit the draft.`,
       })
+  } catch (error: any) {
+    setActionFeedback({
+      type: 'error',
+      message: error?.message || 'Failed to create new revision',
+    })
+  } finally {
+    setActionLoading(null)
+  }
+}
+
+  const handleDeleteManual = async (manual: Manual) => {
+    if (!canDelete) {
+      return
+    }
+
+    if (!confirm(`Delete "${manual.title}"? The manual will be archived and removed from this list.`)) {
+      return
+    }
+
+    try {
+      setActionLoading(manual.id)
+      setActionFeedback(null)
+
+      const response = await fetch(`/api/manuals/${manual.id}`, {
+        method: 'DELETE',
+      })
+
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to delete manual')
+      }
+
+      setManuals(prev => prev.filter(item => item.id !== manual.id))
+      setActionFeedback({
+        type: 'success',
+        message: `"${manual.title}" was deleted.`,
+      })
     } catch (error: any) {
       setActionFeedback({
         type: 'error',
-        message: error?.message || 'Failed to create new revision',
+        message: error?.message || 'Failed to delete manual',
       })
     } finally {
       setActionLoading(null)
@@ -703,20 +743,36 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
                                     <Download className="h-4 w-4" />
                                   )}
                                 </button>
-                                <Link
-                                  href={`/dashboard/manuals/${manual.id}/edit`}
-                                  className="text-status-red hover:opacity-90"
-                                  title="Revise"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Link>
-                              </>
+                            <Link
+                              href={`/dashboard/manuals/${manual.id}/edit`}
+                              className="text-status-red hover:opacity-90"
+                              title="Revise"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Link>
+                          </>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDeleteManual(manual)}
+                            className={`text-red-600 hover:text-red-700 ${
+                              actionLoading === manual.id ? 'cursor-wait opacity-60' : ''
+                            }`}
+                            title="Delete Manual"
+                            disabled={actionLoading === manual.id}
+                          >
+                            {actionLoading === manual.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
                     <tr>
                       <td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-500">
                         {manuals.length === 0

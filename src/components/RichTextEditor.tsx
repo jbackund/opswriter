@@ -496,7 +496,7 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
       {/* Editor */}
       <EditorContent
         editor={editor}
-        className="prose prose-sm max-w-none p-4 min-h-[400px] focus:outline-none bg-white text-gray-900 cursor-text [&>*:first-child]:mt-0"
+        className="prose prose-sm max-w-none p-4 min-h-[400px] focus:outline-none bg-white text-gray-900 cursor-text [&>*:first-child]:mt-0 [&_table]:w-full [&_table]:border [&_table]:border-gray-300 [&_table]:border-collapse [&_th]:bg-gray-50 [&_th]:border [&_th]:border-gray-300 [&_th]:px-3 [&_th]:py-2 [&_td]:border [&_td]:border-gray-200 [&_td]:px-3 [&_td]:py-2 [&_tr:nth-child(even)]:bg-gray-50/50"
         placeholder={placeholder}
         onMouseDown={(event) => {
           if (event.target === event.currentTarget && !editor.isFocused) {

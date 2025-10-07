@@ -310,6 +310,7 @@ CREATE TABLE audit_logs (
   action TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   entity_id UUID,
+  manual_id UUID,
   details JSONB,
   ip_address INET,
   user_agent TEXT,
@@ -318,6 +319,7 @@ CREATE TABLE audit_logs (
 
 CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
 CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX idx_audit_logs_manual ON audit_logs(manual_id);
 CREATE INDEX idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
 
@@ -353,6 +355,8 @@ CREATE OR REPLACE FUNCTION log_audit_event()
 RETURNS TRIGGER AS $$
 DECLARE
   action_type TEXT;
+  manual_ref UUID;
+  related_chapter UUID;
 BEGIN
   IF TG_OP = 'INSERT' THEN
     action_type := 'created';
@@ -362,12 +366,31 @@ BEGIN
     action_type := 'deleted';
   END IF;
 
-  INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+  IF TG_TABLE_NAME = 'manuals' THEN
+    manual_ref := COALESCE(NEW.id, OLD.id);
+  ELSIF TG_TABLE_NAME = 'chapters' THEN
+    manual_ref := COALESCE(NEW.manual_id, OLD.manual_id);
+  ELSIF TG_TABLE_NAME = 'content_blocks' THEN
+    related_chapter := COALESCE(NEW.chapter_id, OLD.chapter_id);
+    IF related_chapter IS NOT NULL THEN
+      SELECT manual_id INTO manual_ref FROM chapters WHERE id = related_chapter;
+    END IF;
+  ELSIF TG_TABLE_NAME = 'chapter_remarks' THEN
+    related_chapter := COALESCE(NEW.chapter_id, OLD.chapter_id);
+    IF related_chapter IS NOT NULL THEN
+      SELECT manual_id INTO manual_ref FROM chapters WHERE id = related_chapter;
+    END IF;
+  ELSIF TG_TABLE_NAME = 'revisions' THEN
+    manual_ref := COALESCE(NEW.manual_id, OLD.manual_id);
+  END IF;
+
+  INSERT INTO audit_logs (user_id, action, entity_type, entity_id, manual_id, details)
   VALUES (
     auth.uid(),
     action_type,
     TG_TABLE_NAME,
     COALESCE(NEW.id, OLD.id),
+    manual_ref,
     jsonb_build_object(
       'old', to_jsonb(OLD),
       'new', to_jsonb(NEW)

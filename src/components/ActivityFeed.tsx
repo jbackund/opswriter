@@ -19,10 +19,11 @@ interface Activity {
   action: string
   entity_type: string
   entity_id: string | null
+  manual_id: string | null
   actor_id: string | null
   actor_email: string | null
   created_at: string
-  metadata: any
+  details: any
   user?: {
     full_name: string | null
     email: string | null
@@ -109,16 +110,17 @@ export default function ActivityFeed({
             action,
             entity_type,
             entity_id,
+            manual_id,
             actor_id,
             actor_email,
             created_at,
-            metadata,
+            details,
             user:user_profiles!audit_logs_user_id_fkey(
               full_name,
               email
             )
           `)
-          .eq('entity_id', manualId)
+          .eq('manual_id', manualId)
           .order('created_at', { ascending: false })
           .limit(limit)
 
@@ -126,7 +128,11 @@ export default function ActivityFeed({
           throw fetchError
         }
 
-        const fetchedActivities = data || []
+        const fetchedActivities =
+          (data || []).map(item => ({
+            ...item,
+            details: item.details ?? (item as any).metadata ?? null,
+          })) as Activity[]
 
         if (isMounted) {
           setActivities(fetchedActivities)
@@ -155,10 +161,11 @@ export default function ActivityFeed({
           action,
           entity_type,
           entity_id,
+          manual_id,
           actor_id,
           actor_email,
           created_at,
-          metadata,
+          details,
           user:user_profiles!audit_logs_user_id_fkey(
             full_name,
             email
@@ -182,10 +189,18 @@ export default function ActivityFeed({
         const existingIndex = prev.findIndex(activity => activity.id === data.id)
         if (existingIndex !== -1) {
           const next = [...prev]
-          next[existingIndex] = { ...next[existingIndex], ...data }
+          next[existingIndex] = {
+            ...next[existingIndex],
+            ...data,
+            details: data.details ?? (data as any).metadata ?? null,
+          }
           return next
         }
-        return [data, ...prev].slice(0, limit)
+        const hydrated = {
+          ...data,
+          details: data.details ?? (data as any).metadata ?? null,
+        } as Activity
+        return [hydrated, ...prev].slice(0, limit)
       })
     }
 
@@ -197,7 +212,7 @@ export default function ActivityFeed({
           event: 'INSERT',
           schema: 'public',
           table: 'audit_logs',
-          filter: `entity_id=eq.${manualId}`,
+          filter: `manual_id=eq.${manualId}`,
         },
         payload => {
           fetchActivityWithActor(payload.new.id)
@@ -234,8 +249,8 @@ export default function ActivityFeed({
       return activity.actor_email
     }
 
-    if (typeof activity.metadata?.actor_email === 'string') {
-      return activity.metadata.actor_email
+    if (typeof activity.details?.actor_email === 'string') {
+      return activity.details.actor_email
     }
 
     return 'Unknown user'
@@ -267,36 +282,73 @@ export default function ActivityFeed({
 
   const getActivityMessage = (activity: Activity) => {
     const actorName = resolveActorName(activity)
-    const metadata = activity.metadata || {}
+    const details = activity.details || {}
+    const newPayload = details.new ?? null
+    const oldPayload = details.old ?? null
+    const entityType = activity.entity_type
+
+    const getChapterIdentifier = (payload: any) => {
+      if (!payload) {
+        return null
+      }
+      const parts: Array<number> = []
+      if (typeof payload.chapter_number === 'number') parts.push(payload.chapter_number)
+      if (typeof payload.section_number === 'number') parts.push(payload.section_number)
+      if (typeof payload.subsection_number === 'number') parts.push(payload.subsection_number)
+      if (typeof payload.clause_number === 'number') parts.push(payload.clause_number)
+      const heading = typeof payload.heading === 'string' ? payload.heading : ''
+      const number = parts.length > 0 ? parts.join('.') : null
+      return { heading, number }
+    }
+
+    const chapterInfo = getChapterIdentifier(newPayload || oldPayload)
+    const chapterLabel = chapterInfo
+      ? `${chapterInfo.number ? `${chapterInfo.number} ` : ''}${chapterInfo.heading || ''}`.trim()
+      : null
 
     switch (activity.action) {
       case 'created':
-        return `${actorName} created the manual`
+        if (entityType === 'chapters' && chapterLabel) {
+          return `${actorName} created chapter ${chapterLabel}`
+        }
+        if (entityType === 'manuals' && newPayload?.title) {
+          return `${actorName} created manual "${newPayload.title}"`
+        }
+        return `${actorName} created ${entityType}`
       case 'updated':
-        return `${actorName} updated ${metadata.field || 'the manual'}`
+        if (entityType === 'chapters' && chapterLabel) {
+          return `${actorName} updated chapter ${chapterLabel}`
+        }
+        if (entityType === 'manuals') {
+          return `${actorName} updated the manual`
+        }
+        return `${actorName} updated ${entityType}`
       case 'status_change':
-        return `${actorName} changed status from ${metadata.from_status} to ${metadata.to_status}`
+        return `${actorName} changed status from ${details.from_status} to ${details.to_status}`
       case 'submitted_for_review':
-        return `${actorName} submitted revision ${metadata.revision_number} for review`
+        return `${actorName} submitted revision ${details.revision_number} for review`
       case 'approved':
-        return `${actorName} approved revision ${metadata.revision_number}`
+        return `${actorName} approved revision ${details.revision_number}`
       case 'rejected':
-        return `${actorName} rejected revision ${metadata.revision_number}${
-          metadata.reason ? `: "${metadata.reason}"` : ''
+        return `${actorName} rejected revision ${details.revision_number}${
+          details.reason ? `: "${details.reason}"` : ''
         }`
       case 'restored':
-        return `${actorName} restored from revision ${metadata.revision_number}`
+        return `${actorName} restored from revision ${details.revision_number}`
       case 'chapter_added':
-        return `${actorName} added chapter ${metadata.chapter_number}: ${metadata.chapter_title}`
+        return `${actorName} added chapter ${details.chapter_number}: ${details.chapter_title}`
       case 'chapter_removed':
-        return `${actorName} removed chapter ${metadata.chapter_number}`
+        return `${actorName} removed chapter ${details.chapter_number}`
       case 'chapter_updated':
-        return `${actorName} updated chapter ${metadata.chapter_number}`
+        return `${actorName} updated chapter ${details.chapter_number}`
       case 'notification_sent':
-        return `${actorName} sent ${metadata.type} notification to ${
-          metadata.recipients?.length || 0
+        return `${actorName} sent ${details.type} notification to ${
+          details.recipients?.length || 0
         } recipient(s)`
       default:
+        if (chapterLabel) {
+          return `${actorName} ${activity.action} chapter ${chapterLabel}`
+        }
         return `${actorName} performed ${activity.action}`
     }
   }

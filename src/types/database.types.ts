@@ -60,6 +60,7 @@ export type Database = {
           entity_type: string
           id: string
           ip_address: unknown | null
+          manual_id: string | null
           metadata: Json | null
           user_agent: string | null
         }
@@ -72,6 +73,7 @@ export type Database = {
           entity_type: string
           id?: string
           ip_address?: unknown | null
+           manual_id?: string | null
           metadata?: Json | null
           user_agent?: string | null
         }
@@ -84,6 +86,7 @@ export type Database = {
           entity_type?: string
           id?: string
           ip_address?: unknown | null
+          manual_id?: string | null
           metadata?: Json | null
           user_agent?: string | null
         }

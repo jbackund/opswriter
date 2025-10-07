@@ -3,6 +3,28 @@ import { createClient } from '@/lib/supabase/server'
 import puppeteer from 'puppeteer-core'
 import chromium from '@sparticuz/chromium'
 
+type ExportRequestType = 'clean' | 'watermarked' | 'diff'
+type ExportJobVariant = 'draft_watermarked' | 'draft_diff' | 'clean_approved'
+
+const mapExportTypeToVariant = (
+  manualStatus: string,
+  exportType: ExportRequestType,
+  includeWatermark: boolean
+): ExportJobVariant => {
+  switch (exportType) {
+    case 'diff':
+      return 'draft_diff'
+    case 'watermarked':
+      return 'draft_watermarked'
+    case 'clean':
+    default:
+      if (manualStatus === 'approved') {
+        return 'clean_approved'
+      }
+      return includeWatermark ? 'draft_watermarked' : 'draft_diff'
+  }
+}
+
 // POST /api/manuals/[id]/export - Generate PDF export
 export async function POST(
   request: NextRequest,
@@ -23,7 +45,10 @@ export async function POST(
     const { id } = await params
     const manualId = id
     const body = await request.json()
-    const { exportType = 'clean', includeWatermark = false } = body
+    const { exportType = 'clean', includeWatermark = false } = body as {
+      exportType?: ExportRequestType
+      includeWatermark?: boolean
+    }
 
     // Get manual with all related data
     const { data: manual, error: manualError } = await supabase
@@ -45,6 +70,8 @@ export async function POST(
         { status: 404 }
       )
     }
+
+    const variant = mapExportTypeToVariant(manual.status, exportType, includeWatermark)
 
     // Get revisions for Record of Revision section
     const { data: revisions } = await supabase
@@ -177,12 +204,12 @@ export async function POST(
       .from('export_jobs')
       .insert({
         manual_id: manualId,
-        variant: exportType,  // Changed from export_type to variant
-        status: 'completed',  // Added required status field
+        variant,
+        status: 'completed',
         file_path: uploadData.path,
-        file_url: signedUrlData?.signedUrl || null,  // Added file_url for easier access
-        created_by: user.id,  // Changed from generated_by to created_by
-        processing_completed_at: new Date().toISOString(),  // Mark as completed
+        file_url: signedUrlData?.signedUrl || null,
+        created_by: user.id,
+        processing_completed_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
       })
       .select()
@@ -216,7 +243,11 @@ function generatePDFHTML(
   includeWatermark: boolean,
   previousRevision: any = null
 ): string {
-  const chapters = (manual.chapters || []).sort((a: any, b: any) => a.display_order - b.display_order)
+  const chapters = buildOrderedChapterList(manual.chapters || [])
+    .map((chapter: any) => ({
+      ...chapter,
+      anchorId: getChapterAnchorId(chapter),
+    }))
 
   return `
 <!DOCTYPE html>
@@ -240,6 +271,21 @@ function generatePDFHTML(
       page-break-after: always;
       text-align: center;
       padding-top: 100px;
+    }
+
+    .cover-logo {
+      margin: 0 auto 40px;
+      width: 180px;
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cover-logo img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
     }
 
     .cover-page h1 {
@@ -268,11 +314,46 @@ function generatePDFHTML(
       margin: 5px 0;
       display: flex;
       justify-content: space-between;
-    }
-
-    .toc-item a {
+      align-items: baseline;
+      padding: 4px 8px;
+      border-radius: 4px;
       text-decoration: none;
       color: #000;
+    }
+
+    .toc-item:hover {
+      background: #f5f5f5;
+    }
+
+    .toc-item .toc-title {
+      flex: 1;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .toc-item .toc-number {
+      font-weight: 600;
+      min-width: 32px;
+    }
+
+    .toc-item .toc-page {
+      margin-left: 12px;
+      min-width: 24px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .toc-item[data-depth="1"] .toc-title {
+      padding-left: 12px;
+    }
+
+    .toc-item[data-depth="2"] .toc-title {
+      padding-left: 24px;
+    }
+
+    .toc-item[data-depth="3"] .toc-title {
+      padding-left: 36px;
     }
 
     .chapter {
@@ -291,6 +372,13 @@ function generatePDFHTML(
 
     .chapter-content {
       margin: 10px 0;
+    }
+
+    .chapter-regulatory {
+      margin: 6px 0 10px;
+      font-size: 9pt;
+      font-style: italic;
+      color: #333;
     }
 
     .chapter-remark {
@@ -360,6 +448,7 @@ function generatePDFHTML(
 
   <!-- Cover Page -->
   <div class="cover-page">
+    ${getCoverLogoHtml(manual)}
     <h1>${manual.title}</h1>
     <div class="metadata">
       <p><strong>Document Code:</strong> ${manual.manual_code}</p>
@@ -425,11 +514,22 @@ function generateTableOfContents(chapters: any[]): string {
   return chapters
     .map((chapter: any) => {
       const chapterNumber = formatChapterNumber(chapter)
+      const depth = typeof chapter.depth === 'number' ? chapter.depth : 0
+      const anchorId = chapter.anchorId || getChapterAnchorId(chapter)
+      const pageLabel =
+        typeof chapter.page_number === 'number'
+          ? chapter.page_number
+          : typeof chapter.display_order === 'number'
+            ? chapter.display_order + 1
+            : ''
       return `
-        <div class="toc-item">
-          <a href="#chapter-${chapter.id}">${chapterNumber} ${chapter.heading}</a>
-          <span>${chapter.display_order}</span>
-        </div>
+        <a class="toc-item" data-depth="${depth}" href="#${anchorId}">
+          <span class="toc-title">
+            ${chapterNumber ? `<span class="toc-number">${chapterNumber}</span>` : ''}
+            <span class="toc-heading">${chapter.heading}</span>
+          </span>
+          <span class="toc-page">${pageLabel}</span>
+        </a>
       `
     })
     .join('')
@@ -584,6 +684,16 @@ function generateChaptersContent(chapters: any[], exportType: string = 'clean', 
       const remarks = (chapter.chapter_remarks || [])
         .sort((a: any, b: any) => a.display_order - b.display_order)
 
+      const regulatoryReferences = Array.isArray(chapter.regulatory_reference)
+        ? chapter.regulatory_reference
+            .map((ref: any) => (typeof ref === 'string' ? ref.trim() : ''))
+            .filter((ref: string) => ref.length > 0)
+        : []
+
+      const regulatoryHtml = regulatoryReferences.length > 0
+        ? `<div class="chapter-regulatory">Regulatory References: ${regulatoryReferences.join(', ')}</div>`
+        : ''
+
       // Get previous chapter content for diff if available
       let previousChapterContent = ''
       let previousChapterHeading = ''
@@ -616,8 +726,9 @@ function generateChaptersContent(chapters: any[], exportType: string = 'clean', 
         : `<h3 class="chapter-heading">${chapterNumber} ${chapter.heading}</h3>`
 
       return `
-        <div class="chapter ${pageBreakClass}" id="chapter-${chapter.id}">
+        <div class="chapter ${pageBreakClass}" id="${chapter.anchorId}">
           ${headingHtml}
+          ${regulatoryHtml}
 
           ${contentBlocks
             .map(
@@ -664,6 +775,124 @@ function formatChapterNumber(chapter: any): string {
   if (chapter.subsection_number !== null) parts.push(chapter.subsection_number)
   if (chapter.clause_number !== null) parts.push(chapter.clause_number)
   return parts.join('.')
+}
+
+function getChapterAnchorId(chapter: any): string {
+  const numberPart = formatChapterNumber(chapter)
+  const sanitizedNumber = numberPart ? numberPart.replace(/\./g, '-') : ''
+  const sanitizedHeading = (chapter.heading || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+  const sanitizedId = (chapter.id || '')
+    .toString()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+
+  const combined = [sanitizedNumber, sanitizedHeading, sanitizedId]
+    .filter(Boolean)
+    .join('-')
+    .replace(/-+/g, '-')
+
+  return `chapter-${combined || 'section'}`
+}
+
+function buildOrderedChapterList(rawChapters: any[]): any[] {
+  if (!Array.isArray(rawChapters) || rawChapters.length === 0) {
+    return []
+  }
+
+  const chaptersByParent = new Map<string | null, any[]>()
+  rawChapters.forEach((chapter: any) => {
+    const parentKey = chapter.parent_id ?? null
+    if (!chaptersByParent.has(parentKey)) {
+      chaptersByParent.set(parentKey, [])
+    }
+    chaptersByParent.get(parentKey)!.push(chapter)
+  })
+
+  chaptersByParent.forEach(list => {
+    list.sort((a: any, b: any) => {
+      const orderA = typeof a.display_order === 'number' ? a.display_order : 0
+      const orderB = typeof b.display_order === 'number' ? b.display_order : 0
+      return orderA - orderB
+    })
+  })
+
+  const ordered: any[] = []
+  const visited = new Set<string>()
+
+  const walk = (nodes: any[], depth: number) => {
+    nodes.forEach((node: any) => {
+      if (!node || visited.has(node.id)) {
+        return
+      }
+      visited.add(node.id)
+
+      const computedDepth =
+        typeof node.depth === 'number'
+          ? node.depth
+          : depth
+
+      ordered.push({
+        ...node,
+        depth: computedDepth,
+      })
+
+      const childNodes = chaptersByParent.get(node.id)
+      if (childNodes && childNodes.length > 0) {
+        walk(childNodes, computedDepth + 1)
+      }
+    })
+  }
+
+  const rootNodes = chaptersByParent.get(null) ?? []
+  walk(rootNodes, 0)
+
+  const remaining = rawChapters.filter(
+    (chapter: any) => chapter?.id && !visited.has(chapter.id)
+  )
+
+  if (remaining.length > 0) {
+    remaining
+      .sort((a: any, b: any) => {
+        const orderA = typeof a.display_order === 'number' ? a.display_order : 0
+        const orderB = typeof b.display_order === 'number' ? b.display_order : 0
+        return orderA - orderB
+      })
+      .forEach((chapter: any) => {
+        ordered.push({
+          ...chapter,
+          depth: typeof chapter.depth === 'number' ? chapter.depth : 0,
+        })
+      })
+  }
+
+  return ordered
+}
+
+function getCoverLogoHtml(manual: any): string {
+  const logoUrl =
+    manual?.cover_logo_url ||
+    manual?.organization_logo_url ||
+    manual?.organization?.logo_url ||
+    manual?.organization_settings?.logo_url
+
+  if (!logoUrl || typeof logoUrl !== 'string') {
+    return ''
+  }
+
+  const escapedUrl = logoUrl.replace(/"/g, '&quot;')
+  const altText = manual?.organization_name
+    ? `${manual.organization_name} logo`
+    : 'Organization logo'
+
+  return `
+    <div class="cover-logo">
+      <img src="${escapedUrl}" alt="${altText}" />
+    </div>
+  `
 }
 
 function generateHeaderTemplate(manual: any): string {
