@@ -98,12 +98,20 @@ export default function ExportButtonAsync({
   }
 
   const triggerDownload = (url: string, fileName: string) => {
-    const link = document.createElement('a')
-    link.href = url
-    link.download = fileName || `${manualCode}_${currentRevision}.pdf`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    const newTab = window.open(url, '_blank', 'noopener,noreferrer')
+
+    if (!newTab) {
+      const link = document.createElement('a')
+      link.href = url
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      if (fileName) {
+        link.download = fileName
+      }
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
   }
 
   const handleExport = async (exportType: 'clean' | 'watermarked' | 'diff') => {

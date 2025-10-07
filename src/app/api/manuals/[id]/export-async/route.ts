@@ -1,6 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+type ExportRequestType = 'clean' | 'watermarked' | 'diff'
+type ExportJobVariant = 'draft_watermarked' | 'draft_diff' | 'clean_approved'
+
+const mapExportTypeToVariant = (
+  manualStatus: string,
+  exportType: ExportRequestType,
+  includeWatermark: boolean
+): ExportJobVariant => {
+  switch (exportType) {
+    case 'diff':
+      return 'draft_diff'
+    case 'watermarked':
+      return 'draft_watermarked'
+    case 'clean':
+    default:
+      if (manualStatus === 'approved') {
+        return 'clean_approved'
+      }
+      return includeWatermark ? 'draft_watermarked' : 'draft_diff'
+  }
+}
+
 // POST /api/manuals/[id]/export-async - Start async PDF export job
 export async function POST(
   request: NextRequest,
@@ -21,12 +43,15 @@ export async function POST(
     const { id } = await params
     const manualId = id
     const body = await request.json()
-    const { exportType = 'clean', includeWatermark = false } = body
+    const { exportType = 'clean', includeWatermark = false } = body as {
+      exportType?: ExportRequestType
+      includeWatermark?: boolean
+    }
 
     // Check if manual exists
     const { data: manual, error: manualError } = await supabase
       .from('manuals')
-      .select('id, title, manual_code, current_revision')
+      .select('id, title, manual_code, current_revision, status')
       .eq('id', manualId)
       .single()
 
@@ -37,14 +62,16 @@ export async function POST(
       )
     }
 
+    const variant = mapExportTypeToVariant(manual.status, exportType, includeWatermark)
+
     // Create export job record
     const { data: job, error: jobError } = await supabase
       .from('export_jobs')
       .insert({
         manual_id: manualId,
-        variant: exportType,  // Changed from export_type to variant
+        variant,
         status: 'pending',
-        created_by: user.id,  // Changed from generated_by to created_by
+        created_by: user.id,
         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
       })
       .select()
@@ -92,6 +119,7 @@ export async function POST(
       jobId: job.id,
       status: 'pending',
       message: 'PDF generation started. Check job status for completion.',
+      variant,
     })
   } catch (error) {
     console.error('Export error:', error)
@@ -157,33 +185,36 @@ export async function GET(
       }
     }
 
-    // If job is completed and has a file URL, return it
-    if (job.status === 'completed' && job.file_url) {  // Changed from download_url to file_url
-      // Generate a fresh signed URL if the existing one is expired
-      const urlExpired = job.file_url && new URL(job.file_url).searchParams.get('expires')
-      if (urlExpired && new Date(urlExpired) < new Date()) {
-        const { data: signedUrlData } = await supabase.storage
-          .from('manual-exports')
-          .createSignedUrl(job.file_path, 604800) // 7 days
+    // If job is completed and has a stored file path, return a signed download URL
+    if (job.status === 'completed' && job.file_path) {
+      let downloadUrl = job.file_url || null
 
-        if (signedUrlData?.signedUrl) {
-          // Update job with new URL
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from('manual-exports')
+        .createSignedUrl(job.file_path, 604800)
+
+      if (!signedUrlError && signedUrlData?.signedUrl) {
+        downloadUrl = signedUrlData.signedUrl
+
+        if (downloadUrl !== job.file_url) {
           await supabase
             .from('export_jobs')
-            .update({ file_url: signedUrlData.signedUrl })  // Changed from download_url to file_url
+            .update({ file_url: downloadUrl })
             .eq('id', jobId)
-
-          job.file_url = signedUrlData.signedUrl  // Changed from download_url to file_url
         }
+      } else if (signedUrlError) {
+        console.error('Failed to create signed URL for export job', signedUrlError)
       }
 
       return NextResponse.json({
         jobId: job.id,
         status: job.status,
-        downloadUrl: job.file_url,  // Changed from download_url to file_url
+        variant: job.variant,
+        downloadUrl,
         fileName: job.file_path?.split('/').pop() || 'export.pdf',
-        completedAt: job.processing_completed_at,  // Changed from completed_at to processing_completed_at
+        completedAt: job.processing_completed_at,
         fileSizeBytes: job.file_size_bytes,
+        expiresAt: job.expires_at,
       })
     }
 
@@ -191,9 +222,10 @@ export async function GET(
     return NextResponse.json({
       jobId: job.id,
       status: job.status,
+      variant: job.variant,
       errorMessage: job.error_message,
-      startedAt: job.processing_started_at,  // Changed from started_at to processing_started_at
-      completedAt: job.processing_completed_at,  // Changed from completed_at to processing_completed_at
+      startedAt: job.processing_started_at,
+      completedAt: job.processing_completed_at,
     })
   } catch (error) {
     console.error('Job status check error:', error)

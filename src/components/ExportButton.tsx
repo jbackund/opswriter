@@ -47,13 +47,17 @@ export default function ExportButton({
       const data = await response.json()
 
       if (data.downloadUrl) {
-        // Trigger download
-        const link = document.createElement('a')
-        link.href = data.downloadUrl
-        link.download = data.fileName || `${manualCode}_${currentRevision}.pdf`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        const newTab = window.open(data.downloadUrl, '_blank', 'noopener,noreferrer')
+
+        if (!newTab) {
+          const link = document.createElement('a')
+          link.href = data.downloadUrl
+          link.target = '_blank'
+          link.rel = 'noopener noreferrer'
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+        }
       }
     } catch (err) {
       console.error('Export error:', err)

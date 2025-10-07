@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { session as sessionConfig } from '@/lib/config'
 import { Shield, Clock, User, AlertCircle, Check, Lock, Activity, Plus, Edit2, Trash2 } from 'lucide-react'
 
 interface AuditLog {
@@ -99,7 +100,7 @@ export default function SecuritySettings({ userRole }: SecuritySettingsProps) {
             'HTTPS Enabled': securityChecks.https,
             'Row Level Security': securityChecks.rls,
             'Multi-Factor Authentication': securityChecks.mfa,
-            'Session Timeout (30 min)': securityChecks.sessionTimeout,
+            [`Session Timeout (${sessionConfig.timeoutMinutes} min)`]: securityChecks.sessionTimeout,
             'Data Encryption at Rest': securityChecks.encryption,
           }).map(([label, enabled]) => (
             <div

@@ -61,6 +61,7 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
   const [cloneCode, setCloneCode] = useState('')
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [exportLoading, setExportLoading] = useState<string | null>(null)
 
   useEffect(() => {
     if (!actionFeedback) return
@@ -175,6 +176,69 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
     setCloneTitle(`${manual.title} (Copy)`)
     setCloneCode(`${manual.manual_code}-COPY`)
     setShowCloneModal(true)
+  }
+
+  const handleExportManual = async (manual: Manual) => {
+    const exportConfig = (() => {
+      switch (manual.status) {
+        case 'draft':
+          return { exportType: 'watermarked' as const, includeWatermark: true }
+        case 'in_review':
+          return { exportType: 'diff' as const, includeWatermark: false }
+        case 'approved':
+          return { exportType: 'clean' as const, includeWatermark: false }
+        case 'rejected':
+          return { exportType: 'watermarked' as const, includeWatermark: true }
+        default:
+          return { exportType: 'clean' as const, includeWatermark: false }
+      }
+    })()
+
+    try {
+      setExportLoading(manual.id)
+      setActionFeedback(null)
+
+      const response = await fetch(`/api/manuals/${manual.id}/export`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          exportType: exportConfig.exportType,
+          includeWatermark: exportConfig.includeWatermark,
+        }),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok || !payload?.downloadUrl) {
+        throw new Error(payload?.error || 'Failed to export manual')
+      }
+
+      const newTab = window.open(payload.downloadUrl, '_blank', 'noopener,noreferrer')
+
+      if (!newTab) {
+        const link = document.createElement('a')
+        link.href = payload.downloadUrl
+        link.target = '_blank'
+        link.rel = 'noopener noreferrer'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+
+      setActionFeedback({
+        type: 'success',
+        message: 'Manual export generated. Download should begin shortly.',
+      })
+    } catch (error: any) {
+      setActionFeedback({
+        type: 'error',
+        message: error?.message || 'Failed to export manual',
+      })
+    } finally {
+      setExportLoading(null)
+    }
   }
 
   const getStatusBadge = (status: string) => {
@@ -542,10 +606,22 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
                                   <Edit className="h-4 w-4" />
                                 </Link>
                                 <button
+                                  onClick={() => handleExportManual(manual)}
+                                  className={`text-gray-600 hover:opacity-90 ${exportLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
+                                  title="Export PDF"
+                                  disabled={exportLoading === manual.id || actionLoading === manual.id}
+                                >
+                                  {exportLoading === manual.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <button
                                   onClick={() => handleSendForReview(manual)}
-                                  className={`text-status-green hover:opacity-90 ${actionLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
+                                  className={`text-status-green hover:opacity-90 ${actionLoading === manual.id || exportLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
                                   title="Send in Review"
-                                  disabled={actionLoading === manual.id}
+                                  disabled={actionLoading === manual.id || exportLoading === manual.id}
                                 >
                                   {actionLoading === manual.id ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -556,13 +632,27 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
                               </>
                             )}
                             {manual.status === 'in_review' && (
-                              <Link
-                                href={`/dashboard/manuals/${manual.id}/review`}
-                                className="text-status-orange hover:opacity-90"
-                                title="Review Manual"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Link>
+                              <>
+                                <button
+                                  onClick={() => handleExportManual(manual)}
+                                  className={`text-gray-600 hover:opacity-90 ${exportLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
+                                  title="Export PDF"
+                                  disabled={exportLoading === manual.id || actionLoading === manual.id}
+                                >
+                                  {exportLoading === manual.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <Link
+                                  href={`/dashboard/manuals/${manual.id}/review`}
+                                  className="text-status-orange hover:opacity-90"
+                                  title="Review Manual"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Link>
+                              </>
                             )}
                             {manual.status === 'approved' && (
                               <>
@@ -574,16 +664,22 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
                                   <Eye className="h-4 w-4" />
                                 </Link>
                                 <button
-                                  className="text-gray-600 hover:opacity-90"
+                                  onClick={() => handleExportManual(manual)}
+                                  className={`text-gray-600 hover:opacity-90 ${exportLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
                                   title="Export PDF"
+                                  disabled={exportLoading === manual.id || actionLoading === manual.id}
                                 >
-                                  <Download className="h-4 w-4" />
+                                  {exportLoading === manual.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
                                 </button>
                                 <button
                                   onClick={() => handleStartNextRevision(manual)}
-                                  className={`text-docgen-blue hover:opacity-90 ${actionLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
+                                  className={`text-docgen-blue hover:opacity-90 ${actionLoading === manual.id || exportLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
                                   title="Start Next Revision"
-                                  disabled={actionLoading === manual.id}
+                                  disabled={actionLoading === manual.id || exportLoading === manual.id}
                                 >
                                   {actionLoading === manual.id ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -594,13 +690,27 @@ export default function ManualsList({ initialManuals }: ManualsListProps) {
                               </>
                             )}
                             {manual.status === 'rejected' && (
-                              <Link
-                                href={`/dashboard/manuals/${manual.id}/edit`}
-                                className="text-status-red hover:opacity-90"
-                                title="Revise"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Link>
+                              <>
+                                <button
+                                  onClick={() => handleExportManual(manual)}
+                                  className={`text-gray-600 hover:opacity-90 ${exportLoading === manual.id ? 'cursor-wait opacity-60' : ''}`}
+                                  title="Export PDF"
+                                  disabled={exportLoading === manual.id || actionLoading === manual.id}
+                                >
+                                  {exportLoading === manual.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <Link
+                                  href={`/dashboard/manuals/${manual.id}/edit`}
+                                  className="text-status-red hover:opacity-90"
+                                  title="Revise"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Link>
+                              </>
                             )}
                           </div>
                         </td>

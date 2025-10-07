@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Table } from '@tiptap/extension-table'
@@ -12,6 +12,8 @@ import { Link } from '@tiptap/extension-link'
 import { Underline } from '@tiptap/extension-underline'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
+import { Highlight } from '@tiptap/extension-highlight'
+import TextAlign from '@tiptap/extension-text-align'
 import {
   Bold,
   Italic,
@@ -34,6 +36,10 @@ import {
   AlignCenter,
   AlignRight,
   AlignJustify,
+  Palette,
+  Eraser,
+  Highlighter,
+  Loader2,
 } from 'lucide-react'
 
 interface RichTextEditorProps {
@@ -45,6 +51,10 @@ interface RichTextEditorProps {
 
 export default function RichTextEditor({ content, onChange, placeholder, readOnly = false }: RichTextEditorProps) {
   const lastContentRef = useRef(content)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const colorInputRef = useRef<HTMLInputElement | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [selectedColor, setSelectedColor] = useState('#1f2937')
 
   const editor = useEditor({
     extensions: [
@@ -64,6 +74,9 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
       TableRow,
       TableHeader,
       TableCell,
+      Highlight.configure({
+        multicolor: true,
+      }),
       Image.configure({
         inline: true,
         allowBase64: true,
@@ -71,6 +84,9 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
       Link.configure({
         openOnClick: false,
         autolink: true,
+      }),
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
       }),
     ],
     content,
@@ -84,6 +100,15 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
     },
     immediatelyRender: false,
   })
+
+  const focusEditor = (position?: 'start' | 'end') => {
+    if (!editor || readOnly) return
+    if (position) {
+      editor.chain().focus(position).run()
+      return
+    }
+    editor.chain().focus().run()
+  }
 
   useEffect(() => {
     if (!editor) return
@@ -108,13 +133,6 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
     editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
   }
 
-  const addImage = () => {
-    const url = window.prompt('Enter image URL:')
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run()
-    }
-  }
-
   const setLink = () => {
     const url = window.prompt('Enter URL:')
     if (url) {
@@ -122,10 +140,98 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
     }
   }
 
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file) {
+      return
+    }
+
+    if (!file.type.startsWith('image/')) {
+      window.alert('Please select a valid image file (.png, .jpg, .gif, .svg).')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      window.alert('Images must be smaller than 5MB.')
+      return
+    }
+
+    setIsUploadingImage(true)
+
+    try {
+      const fileAsDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result
+          if (typeof result === 'string') {
+            resolve(result)
+          } else {
+            reject(new Error('Invalid image data'))
+          }
+        }
+        reader.onerror = () => {
+          reject(reader.error || new Error('Failed to read image file'))
+        }
+        reader.readAsDataURL(file)
+      })
+
+      editor.chain().focus().setImage({ src: fileAsDataUrl }).run()
+    } catch (error) {
+      console.error('Unexpected error while uploading image:', error)
+      window.alert('Unexpected error while uploading the image. Please try again.')
+    } finally {
+      setIsUploadingImage(false)
+    }
+  }
+
+  const triggerImageUpload = () => {
+    if (readOnly) return
+    fileInputRef.current?.click()
+  }
+
+  const triggerColorPicker = () => {
+    if (readOnly) return
+    if (editor) {
+      const currentColor = editor.getAttributes('textStyle')?.color
+      if (currentColor) {
+        setSelectedColor(currentColor)
+      }
+    }
+    colorInputRef.current?.click()
+  }
+
+  const handleColorChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value
+    setSelectedColor(value)
+    if (!editor) return
+    editor.chain().focus().setColor(value).run()
+  }
+
+  const clearColor = () => {
+    if (!editor) return
+    editor.chain().focus().unsetColor().run()
+  }
+
   return (
-    <div className="border border-gray-300 rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm transition focus-within:border-docgen-blue focus-within:ring-2 focus-within:ring-docgen-blue/20">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageUpload}
+      />
+      <input
+        ref={colorInputRef}
+        type="color"
+        className="hidden"
+        value={selectedColor}
+        onChange={handleColorChange}
+      />
       {!readOnly && (
-        <div className="bg-gray-50 border-b border-gray-300 px-2 py-1">
+        <div className="bg-gray-50 border-b border-gray-200 px-2 py-1">
           <div className="flex flex-wrap items-center gap-1">
           {/* Text formatting */}
           <div className="flex items-center border-r pr-1 mr-1">
@@ -257,6 +363,80 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
             </button>
           </div>
 
+          {/* Alignment */}
+          <div className="flex items-center border-r pr-1 mr-1">
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().setTextAlign('left').run()}
+              className={`p-1.5 rounded hover:bg-gray-200 ${
+                editor.isActive({ textAlign: 'left' }) ? 'bg-gray-200' : ''
+              }`}
+              title="Align left"
+            >
+              <AlignLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().setTextAlign('center').run()}
+              className={`p-1.5 rounded hover:bg-gray-200 ${
+                editor.isActive({ textAlign: 'center' }) ? 'bg-gray-200' : ''
+              }`}
+              title="Align center"
+            >
+              <AlignCenter className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().setTextAlign('right').run()}
+              className={`p-1.5 rounded hover:bg-gray-200 ${
+                editor.isActive({ textAlign: 'right' }) ? 'bg-gray-200' : ''
+              }`}
+              title="Align right"
+            >
+              <AlignRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+              className={`p-1.5 rounded hover:bg-gray-200 ${
+                editor.isActive({ textAlign: 'justify' }) ? 'bg-gray-200' : ''
+              }`}
+              title="Justify"
+            >
+              <AlignJustify className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Color & highlight */}
+          <div className="flex items-center border-r pr-1 mr-1">
+            <button
+              type="button"
+              onClick={triggerColorPicker}
+              className="p-1.5 rounded hover:bg-gray-200"
+              title="Text color"
+            >
+              <Palette className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={clearColor}
+              className="p-1.5 rounded hover:bg-gray-200"
+              title="Clear text color"
+            >
+              <Eraser className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().toggleHighlight().run()}
+              className={`p-1.5 rounded hover:bg-gray-200 ${
+                editor.isActive('highlight') ? 'bg-gray-200' : ''
+              }`}
+              title="Highlight"
+            >
+              <Highlighter className="h-4 w-4" />
+            </button>
+          </div>
+
           {/* Insert */}
           <div className="flex items-center border-r pr-1 mr-1">
             <button
@@ -269,11 +449,12 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
             </button>
             <button
               type="button"
-              onClick={addImage}
-              className="p-1.5 rounded hover:bg-gray-200"
+              onClick={triggerImageUpload}
+              className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={isUploadingImage}
               title="Insert image"
             >
-              <ImageIcon className="h-4 w-4" />
+              {isUploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
             </button>
             <button
               type="button"
@@ -315,8 +496,13 @@ export default function RichTextEditor({ content, onChange, placeholder, readOnl
       {/* Editor */}
       <EditorContent
         editor={editor}
-        className="prose prose-sm max-w-none p-4 min-h-[400px] focus:outline-none"
+        className="prose prose-sm max-w-none p-4 min-h-[400px] focus:outline-none bg-white text-gray-900 cursor-text [&>*:first-child]:mt-0"
         placeholder={placeholder}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !editor.isFocused) {
+            focusEditor('end')
+          }
+        }}
       />
     </div>
   )

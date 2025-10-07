@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import type { Database } from '@/types/database.types'
 import { createClient } from '@/lib/supabase/client'
 import RichTextEditor from './RichTextEditor'
 import RevisionHistory from './RevisionHistory'
@@ -12,6 +13,7 @@ import AuditTrail from './AuditTrail'
 import ActivityFeed from './ActivityFeed'
 import ExportButton from './ExportButton'
 import ManualReferencesSelector from './ManualReferencesSelector'
+import ManualMetadataModal from './ManualMetadataModal'
 import {
   Save,
   Plus,
@@ -66,6 +68,7 @@ interface Chapter {
   content?: string  // Deprecated - kept for backward compatibility
   content_blocks?: ContentBlock[]
   page_break: boolean
+  regulatory_reference: string[] | null
   display_order: number
   depth: number
   is_mandatory: boolean
@@ -73,18 +76,9 @@ interface Chapter {
   updated_at: string
 }
 
-interface Manual {
-  id: string
-  title: string
-  description: string
-  organization_name: string
-  manual_code: string
-  reference_number: string | null
-  status: string
-  current_revision: string
-  effective_date: string | null
-  tags: string[] | null
-  created_by: string
+type ManualRow = Database['public']['Tables']['manuals']['Row']
+
+interface Manual extends ManualRow {
   created_by_user: {
     full_name: string
     email: string
@@ -119,6 +113,13 @@ const getChapterContent = (chapter: Chapter): string => {
   return chapter.content || ''
 }
 
+const arraysEqual = (a: string[], b: string[]): boolean => {
+  if (a.length !== b.length) {
+    return false
+  }
+  return a.every((value, index) => value === b[index])
+}
+
 export default function ManualEditor({ manual: initialManual, userId, readOnly = false }: ManualEditorProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -131,6 +132,8 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   const [editingChapter, setEditingChapter] = useState<string | null>(null)
   const [chapterTitle, setChapterTitle] = useState('')
   const [chapterContent, setChapterContent] = useState('')
+  const [regulatoryReferences, setRegulatoryReferences] = useState<string[]>([])
+  const [newRegulatoryReference, setNewRegulatoryReference] = useState('')
   const [pageBreakBefore, setPageBreakBefore] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -181,6 +184,8 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       setChapterTitle(chapter0.heading)
       setChapterContent(getChapterContent(chapter0))
       setPageBreakBefore(chapter0.page_break)
+      setRegulatoryReferences(chapter0.regulatory_reference ?? [])
+      setNewRegulatoryReference('')
     }
   }, [chapters, selectedChapter])
 
@@ -197,10 +202,12 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     }
 
     // Check if there are changes to save
+    const chapterReferences = selectedChapter.regulatory_reference ?? []
     const hasChanges = (
       chapterTitle !== selectedChapter.heading ||
       chapterContent !== getChapterContent(selectedChapter) ||
-      pageBreakBefore !== selectedChapter.page_break
+      pageBreakBefore !== selectedChapter.page_break ||
+      !arraysEqual(regulatoryReferences, chapterReferences)
     )
 
     if (hasChanges) {
@@ -223,7 +230,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
 
     setHasUnsavedChanges(false)
     return
-  }, [chapterContent, chapterTitle, isReadOnly, pageBreakBefore, selectedChapter])
+  }, [chapterContent, chapterTitle, isReadOnly, pageBreakBefore, regulatoryReferences, selectedChapter])
 
   // Build chapter tree
   const buildChapterTree = (parentId: string | null = null, level: number = 0): any[] => {
@@ -430,7 +437,8 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     if (!isReadOnly && selectedChapter && (
       chapterTitle !== selectedChapter.heading ||
       chapterContent !== getChapterContent(selectedChapter) ||
-      pageBreakBefore !== selectedChapter.page_break
+      pageBreakBefore !== selectedChapter.page_break ||
+      !arraysEqual(regulatoryReferences, selectedChapter.regulatory_reference ?? [])
     )) {
       saveChapter(false) // Not an autosave
     }
@@ -439,8 +447,29 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     setChapterTitle(chapter.heading)
     setChapterContent(getChapterContent(chapter))
     setPageBreakBefore(chapter.page_break)
+    setRegulatoryReferences(chapter.regulatory_reference ?? [])
+    setNewRegulatoryReference('')
     setEditingChapter(null)
     setHasUnsavedChanges(false)
+  }
+
+  const addRegulatoryReference = () => {
+    if (isReadOnly) return
+    const value = newRegulatoryReference.trim()
+    if (!value) return
+
+    setRegulatoryReferences(prev => {
+      if (prev.includes(value)) {
+        return prev
+      }
+      return [...prev, value]
+    })
+    setNewRegulatoryReference('')
+  }
+
+  const removeRegulatoryReference = (index: number) => {
+    if (isReadOnly) return
+    setRegulatoryReferences(prev => prev.filter((_, i) => i !== index))
   }
 
   // Add new chapter
@@ -509,6 +538,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
           heading: 'New Chapter',
           content: '',
           page_break: false,
+          regulatory_reference: [],
           display_order: siblings.length,
           depth: depth,
           is_mandatory: false,
@@ -527,6 +557,8 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       setChapterTitle(data.heading)
       setChapterContent(getChapterContent(data))
       setPageBreakBefore(data.page_break)
+      setRegulatoryReferences(data.regulatory_reference ?? [])
+      setNewRegulatoryReference('')
       setEditingChapter(data.id)
 
       // Expand parent if adding subchapter
@@ -553,12 +585,24 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
     setError(null)
 
     try {
+      const trimmedReferences = regulatoryReferences.map(ref => ref.trim()).filter(ref => ref.length > 0)
+      const normalizedReferences: string[] = []
+      const seen = new Set<string>()
+      trimmedReferences.forEach(ref => {
+        if (!seen.has(ref)) {
+          seen.add(ref)
+          normalizedReferences.push(ref)
+        }
+      })
+      const regulatoryValue = normalizedReferences.length > 0 ? normalizedReferences : null
+
       // First update chapter heading and page_break
       const { error: updateError } = await supabase
         .from('chapters')
         .update({
           heading: chapterTitle,
           page_break: pageBreakBefore,
+          regulatory_reference: regulatoryValue,
           updated_at: new Date().toISOString()
         })
         .eq('id', selectedChapter.id)
@@ -613,6 +657,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
         ...selectedChapter,
         heading: chapterTitle,
         page_break: pageBreakBefore,
+        regulatory_reference: regulatoryValue,
         content_blocks: existingBlock || chapterContent.trim()
           ? [{
               id: existingBlock?.id || 'temp-id',
@@ -632,6 +677,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
         prev.map(ch => (ch.id === selectedChapter.id ? updatedChapter : ch))
       )
       setSelectedChapter(updatedChapter)
+      setRegulatoryReferences(normalizedReferences)
 
       // Update save status
       setLastSaved(new Date())
@@ -651,7 +697,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
         setSaving(false)
       }
     }
-  }, [chapterContent, chapterTitle, isReadOnly, pageBreakBefore, selectedChapter, supabase, userId])
+  }, [chapterContent, chapterTitle, isReadOnly, pageBreakBefore, regulatoryReferences, selectedChapter, supabase, userId])
 
   useEffect(() => {
     saveChapterRef.current = saveChapter
@@ -1456,6 +1502,79 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
               </div>
               <div className="flex-1 p-6 overflow-y-auto">
                 <div className="max-w-4xl mx-auto">
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Regulatory References
+                    </label>
+                    {isReadOnly ? (
+                      regulatoryReferences.length > 0 ? (
+                        <ul className="space-y-2">
+                          {regulatoryReferences.map((ref, index) => (
+                            <li
+                              key={`${ref}-${index}`}
+                              className="text-sm text-gray-700 bg-gray-100 border border-gray-200 rounded-md px-3 py-2"
+                            >
+                              {ref}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-sm text-gray-500 bg-gray-100 border border-gray-200 rounded-md px-3 py-2">
+                          No regulatory references provided
+                        </div>
+                      )
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap gap-2 mb-3 min-h-[2rem]">
+                          {regulatoryReferences.length > 0 ? (
+                            regulatoryReferences.map((ref, index) => (
+                              <span
+                                key={`${ref}-${index}`}
+                                className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 text-xs"
+                              >
+                                {ref}
+                                <button
+                                  type="button"
+                                  onClick={() => removeRegulatoryReference(index)}
+                                  className="ml-1 text-blue-600 hover:text-blue-800"
+                                  aria-label={`Remove ${ref}`}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-gray-500">No references added yet</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="text"
+                            value={newRegulatoryReference}
+                            onChange={(e) => setNewRegulatoryReference(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                addRegulatoryReference()
+                              }
+                            }}
+                            placeholder="e.g. EASA Reg (EU) 965/2012 CAT.OP.MPA.160"
+                            className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-docgen-blue focus:ring-docgen-blue text-sm"
+                            spellCheck={false}
+                          />
+                          <button
+                            type="button"
+                            onClick={addRegulatoryReference}
+                            className="inline-flex items-center justify-center rounded-md bg-docgen-blue px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
+                            disabled={!newRegulatoryReference.trim()}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Chapter Content
                   </label>
@@ -1525,6 +1644,22 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
       </div>
 
       {/* Modals and Overlays */}
+      {showMetadataModal && (
+        <ManualMetadataModal
+          manual={manual}
+          isOpen={showMetadataModal}
+          userId={userId}
+          onClose={() => setShowMetadataModal(false)}
+          onUpdated={updatedManual => {
+            setManual(prev => ({
+              ...prev,
+              ...updatedManual,
+            }))
+            setSuccess('Manual metadata updated successfully')
+          }}
+        />
+      )}
+
       {viewingRevision && (
         <div className="fixed inset-0 bg-white z-50">
           <RevisionViewer

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   Shield,
@@ -21,14 +21,24 @@ interface AuditLog {
   entity_type: string // manuals, chapters, content_blocks, etc.
   entity_id: string | null
   details: any
+  metadata?: any
+  actor_id: string | null
+  actor_email: string | null
   ip_address: string | null
   user_agent: string | null
   created_at: string
   user_id: string | null
-  user: {
-    full_name: string
-    email: string
-  } | null
+  user?:
+    | {
+        full_name: string | null
+        email: string | null
+      }
+    | null
+}
+
+interface ActorProfile {
+  full_name: string | null
+  email: string | null
 }
 
 interface AuditTrailProps {
@@ -36,17 +46,67 @@ interface AuditTrailProps {
 }
 
 export default function AuditTrail({ manualId }: AuditTrailProps) {
+  const supabase = useMemo(() => createClient(), [])
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [actorProfiles, setActorProfiles] = useState<Record<string, ActorProfile>>({})
+  const profilesRef = useRef<Record<string, ActorProfile>>({})
+  const isMountedRef = useRef(true)
   const [filters, setFilters] = useState({
     action: '',
     entity_type: '',
     start_date: '',
     end_date: '',
   })
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const loadActorProfiles = useCallback(
+    async (actorIds: Array<string | null | undefined>) => {
+      const missingIds = actorIds
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+        .filter(id => !profilesRef.current[id])
+
+      if (missingIds.length === 0) {
+        return
+      }
+
+      const { data, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, email')
+        .in('id', missingIds)
+
+      if (profileError) {
+        console.error('Failed to load audit user profiles:', profileError)
+        return
+      }
+
+      if (!data || !isMountedRef.current) {
+        return
+      }
+
+      setActorProfiles(prev => {
+        const next = { ...prev }
+        data.forEach(profile => {
+          next[profile.id] = {
+            full_name: profile.full_name ?? null,
+            email: profile.email ?? null,
+          }
+        })
+        profilesRef.current = next
+        return next
+      })
+    },
+    [supabase]
+  )
 
   const fetchAuditLogs = useCallback(async () => {
     try {
@@ -67,31 +127,79 @@ export default function AuditTrail({ manualId }: AuditTrailProps) {
       }
 
       const data = await response.json()
-      setAuditLogs(data.audit_logs || [])
-      setTotalPages(data.pagination?.totalPages || 1)
+      const fetchedLogs: AuditLog[] = (data.audit_logs || []).map((log: any) => ({
+        ...log,
+        details: log.details ?? log.metadata ?? null,
+      }))
+
+      if (isMountedRef.current) {
+        setAuditLogs(fetchedLogs)
+        setTotalPages(data.pagination?.totalPages || 1)
+      }
+
+      await loadActorProfiles(fetchedLogs.map(log => log.actor_id))
     } catch (err) {
       console.error('Error fetching audit logs:', err)
-      setError('Failed to load audit trail')
+      if (isMountedRef.current) {
+        setError('Failed to load audit trail')
+      }
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
     }
-  }, [filters, manualId, page])
+  }, [filters, loadActorProfiles, manualId, page])
 
   useEffect(() => {
     fetchAuditLogs()
   }, [fetchAuditLogs])
 
+  const resolveActorInfo = useCallback(
+    (log: AuditLog): { name: string; email?: string } => {
+      const profile = log.actor_id ? actorProfiles[log.actor_id] : undefined
+      const joinedProfile = log.user
+
+      const fullName = joinedProfile?.full_name || profile?.full_name || null
+      const fallbackIdentifier =
+        joinedProfile?.email ||
+        profile?.email ||
+        (typeof log.actor_email === 'string' ? log.actor_email : undefined) ||
+        (typeof log.details?.actor_email === 'string' ? log.details.actor_email : undefined)
+
+      const emailCandidate =
+        joinedProfile?.email ||
+        profile?.email ||
+        (typeof log.actor_email === 'string' && log.actor_email.includes('@')
+          ? log.actor_email
+          : undefined) ||
+        (typeof log.details?.actor_email === 'string' && log.details.actor_email.includes('@')
+          ? log.details.actor_email
+          : undefined)
+
+      const name = fullName || fallbackIdentifier || 'System'
+
+      return {
+        name,
+        email: emailCandidate && emailCandidate !== name ? emailCandidate : undefined,
+      }
+    },
+    [actorProfiles]
+  )
+
   const handleExportCSV = () => {
     const headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'IP Address', 'User Agent', 'Details']
-    const rows = auditLogs.map((log) => [
-      new Date(log.created_at).toISOString(),
-      log.user?.full_name || 'System',
-      log.action,
-      log.entity_type,
-      log.ip_address || '',
-      log.user_agent || '',
-      JSON.stringify(log.details || {}),
-    ])
+    const rows = auditLogs.map((log) => {
+      const actor = resolveActorInfo(log)
+      return [
+        new Date(log.created_at).toISOString(),
+        actor.name,
+        log.action,
+        log.entity_type,
+        log.ip_address || '',
+        log.user_agent || '',
+        JSON.stringify(log.details || {}),
+      ]
+    })
 
     const csv = [
       headers.join(','),
@@ -269,6 +377,7 @@ export default function AuditTrail({ manualId }: AuditTrailProps) {
               <tbody className="bg-white divide-y divide-gray-200">
                 {auditLogs.map((log) => {
                   const actionBadge = getActionBadge(log.action)
+                  const actor = resolveActorInfo(log)
                   return (
                     <tr key={log.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
@@ -282,10 +391,10 @@ export default function AuditTrail({ manualId }: AuditTrailProps) {
                           <User className="h-4 w-4 text-gray-400" />
                           <div>
                             <p className="font-medium text-gray-900">
-                              {log.user?.full_name || 'System'}
+                              {actor.name}
                             </p>
-                            {log.user?.email && (
-                              <p className="text-xs text-gray-500">{log.user.email}</p>
+                            {actor.email && (
+                              <p className="text-xs text-gray-500">{actor.email}</p>
                             )}
                           </div>
                         </div>

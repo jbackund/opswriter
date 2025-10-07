@@ -80,7 +80,7 @@ const developmentConfig: EnvironmentConfig = {
     enableSentry: false,
   },
   session: {
-    timeoutMinutes: 30,
+    timeoutMinutes: 120,
     warningMinutes: 5,
   },
   export: {
@@ -89,7 +89,7 @@ const developmentConfig: EnvironmentConfig = {
     cacheDurationSeconds: 60,
   },
   email: {
-    fromAddress: 'dev@heliairsweden.com',
+    fromAddress: 'dev@notifications.heliairsweden.com',
     fromName: 'OpsWriter Dev',
     resendApiKey: process.env.RESEND_API_KEY,
   },
@@ -109,7 +109,7 @@ const previewConfig: EnvironmentConfig = {
     enableSentry: true,
   },
   session: {
-    timeoutMinutes: 30,
+    timeoutMinutes: 120,
     warningMinutes: 5,
   },
   export: {
@@ -118,7 +118,7 @@ const previewConfig: EnvironmentConfig = {
     cacheDurationSeconds: 300,
   },
   email: {
-    fromAddress: 'preview@heliairsweden.com',
+    fromAddress: 'preview@notifications.heliairsweden.com',
     fromName: 'OpsWriter Preview',
     resendApiKey: process.env.RESEND_API_KEY,
   },
@@ -140,7 +140,7 @@ const productionConfig: EnvironmentConfig = {
     enableSentry: true,
   },
   session: {
-    timeoutMinutes: 30,
+    timeoutMinutes: 120,
     warningMinutes: 5,
   },
   export: {
@@ -149,7 +149,7 @@ const productionConfig: EnvironmentConfig = {
     cacheDurationSeconds: 3600,
   },
   email: {
-    fromAddress: 'noreply@heliairsweden.com',
+    fromAddress: 'noreply@notifications.heliairsweden.com',
     fromName: 'OpsWriter',
     resendApiKey: process.env.RESEND_API_KEY,
   },

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -9,24 +9,24 @@ import {
   Send,
   CheckCircle,
   XCircle,
-  User,
   FileText,
   AlertCircle,
-  Archive
+  Archive,
 } from 'lucide-react'
 
 interface Activity {
   id: string
   action: string
   entity_type: string
-  entity_id: string
-  actor_id: string
+  entity_id: string | null
+  actor_id: string | null
+  actor_email: string | null
   created_at: string
   metadata: any
   user?: {
-    full_name: string
-    email: string
-  }
+    full_name: string | null
+    email: string | null
+  } | null
 }
 
 interface ActivityFeedProps {
@@ -35,24 +35,73 @@ interface ActivityFeedProps {
   showHeader?: boolean
 }
 
+interface ActorProfile {
+  full_name: string | null
+  email: string | null
+}
+
 export default function ActivityFeed({
   manualId,
   limit = 10,
-  showHeader = true
+  showHeader = true,
 }: ActivityFeedProps) {
+  const supabase = useMemo(() => createClient(), [])
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [actorProfiles, setActorProfiles] = useState<Record<string, ActorProfile>>({})
+  const profilesRef = useRef<Record<string, ActorProfile>>({})
+
+  const loadActorProfiles = useCallback(
+    async (actorIds: Array<string | null | undefined>) => {
+      const missingIds = actorIds
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+        .filter(id => !profilesRef.current[id])
+
+      if (missingIds.length === 0) {
+        return
+      }
+
+      const { data, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, email')
+        .in('id', missingIds)
+
+      if (profileError) {
+        console.error('Failed to load actor profiles:', profileError)
+        return
+      }
+
+      if (!data) {
+        return
+      }
+
+      setActorProfiles(prev => {
+        const next = { ...prev }
+        data.forEach(profile => {
+          next[profile.id] = {
+            full_name: profile.full_name,
+            email: profile.email,
+          }
+        })
+        profilesRef.current = next
+        return next
+      })
+    },
+    [supabase]
+  )
 
   useEffect(() => {
+    let isMounted = true
+
+    profilesRef.current = {}
+    setActorProfiles({})
+
     const fetchActivities = async () => {
       setLoading(true)
       setError(null)
 
       try {
-        const supabase = createClient()
-
-        // Fetch activities from audit_logs with actor information
         const { data, error: fetchError } = await supabase
           .from('audit_logs')
           .select(`
@@ -61,6 +110,7 @@ export default function ActivityFeed({
             entity_type,
             entity_id,
             actor_id,
+            actor_email,
             created_at,
             metadata,
             user:user_profiles!audit_logs_user_id_fkey(
@@ -76,19 +126,69 @@ export default function ActivityFeed({
           throw fetchError
         }
 
-        setActivities(data || [])
+        const fetchedActivities = data || []
+
+        if (isMounted) {
+          setActivities(fetchedActivities)
+        }
+
+        await loadActorProfiles(fetchedActivities.map(activity => activity.actor_id))
       } catch (err) {
         console.error('Failed to fetch activities:', err)
-        setError('Failed to load activity feed')
+        if (isMounted) {
+          setError('Failed to load activity feed')
+        }
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     fetchActivities()
 
-    // Set up real-time subscription for new activities
-    const supabase = createClient()
+    const fetchActivityWithActor = async (activityId: string) => {
+      const { data, error: activityError } = await supabase
+        .from('audit_logs')
+        .select(`
+          id,
+          action,
+          entity_type,
+          entity_id,
+          actor_id,
+          actor_email,
+          created_at,
+          metadata,
+          user:user_profiles!audit_logs_user_id_fkey(
+            full_name,
+            email
+          )
+        `)
+        .eq('id', activityId)
+        .single()
+
+      if (activityError) {
+        console.error('Failed to fetch real-time activity:', activityError)
+        return
+      }
+
+      if (!data) {
+        return
+      }
+
+      await loadActorProfiles([data.actor_id])
+
+      setActivities(prev => {
+        const existingIndex = prev.findIndex(activity => activity.id === data.id)
+        if (existingIndex !== -1) {
+          const next = [...prev]
+          next[existingIndex] = { ...next[existingIndex], ...data }
+          return next
+        }
+        return [data, ...prev].slice(0, limit)
+      })
+    }
+
     const channel = supabase
       .channel(`activity-feed-${manualId}`)
       .on(
@@ -99,41 +199,47 @@ export default function ActivityFeed({
           table: 'audit_logs',
           filter: `entity_id=eq.${manualId}`,
         },
-        (payload) => {
-          // Fetch the new activity with actor information
+        payload => {
           fetchActivityWithActor(payload.new.id)
         }
       )
       .subscribe()
 
-    const fetchActivityWithActor = async (activityId: string) => {
-      const { data } = await supabase
-        .from('audit_logs')
-        .select(`
-          id,
-          action,
-          entity_type,
-          entity_id,
-          actor_id,
-          created_at,
-          metadata,
-          actor:user_profiles!audit_logs_actor_id_fkey(
-            full_name,
-            email
-          )
-        `)
-        .eq('id', activityId)
-        .single()
+    return () => {
+      isMounted = false
+      channel.unsubscribe()
+    }
+  }, [manualId, limit, loadActorProfiles, supabase])
 
-      if (data) {
-        setActivities(prev => [data, ...prev].slice(0, limit))
+  const resolveActorName = (activity: Activity) => {
+    if (activity.actor_id) {
+      const profile = actorProfiles[activity.actor_id]
+      if (profile?.full_name) {
+        return profile.full_name
+      }
+      if (profile?.email) {
+        return profile.email
       }
     }
 
-    return () => {
-      channel.unsubscribe()
+    const joinedProfile = activity.user
+    if (joinedProfile?.full_name) {
+      return joinedProfile.full_name
     }
-  }, [manualId, limit])
+    if (joinedProfile?.email) {
+      return joinedProfile.email
+    }
+
+    if (activity.actor_email) {
+      return activity.actor_email
+    }
+
+    if (typeof activity.metadata?.actor_email === 'string') {
+      return activity.metadata.actor_email
+    }
+
+    return 'Unknown user'
+  }
 
   const getActivityIcon = (action: string) => {
     switch (action) {
@@ -160,7 +266,7 @@ export default function ActivityFeed({
   }
 
   const getActivityMessage = (activity: Activity) => {
-    const actorName = activity.user?.full_name || activity.user?.email || 'Unknown user'
+    const actorName = resolveActorName(activity)
     const metadata = activity.metadata || {}
 
     switch (activity.action) {
@@ -213,7 +319,7 @@ export default function ActivityFeed({
 
   if (activities.length === 0) {
     return (
-      <div className="text-center py-8">
+      <div className="py-8 text-center">
         <Clock className="mx-auto h-12 w-12 text-gray-400" />
         <p className="mt-2 text-sm text-gray-600">No activity yet</p>
       </div>
@@ -223,7 +329,7 @@ export default function ActivityFeed({
   return (
     <div className="space-y-4">
       {showHeader && (
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
           <Clock className="h-5 w-5" />
           Recent Activity
         </h3>
@@ -248,9 +354,7 @@ export default function ActivityFeed({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div>
-                      <p className="text-sm text-gray-900">
-                        {getActivityMessage(activity)}
-                      </p>
+                      <p className="text-sm text-gray-900">{getActivityMessage(activity)}</p>
                       <p className="mt-1 text-xs text-gray-500">
                         {formatDistanceToNow(new Date(activity.created_at), {
                           addSuffix: true,

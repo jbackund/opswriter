@@ -67,7 +67,7 @@ OpsWriter extends the OpsSuite product family to cover manual authoring. It comp
 - Users must authenticate via secure login (email/password). Password rules align with corporate policy (min length 12, complexity).
 - Access restricted to email addresses with @heliairsweden.com domain only. Authentication attempts from other domains must be rejected.
 - Support roles: `Manager` (full manual CRUD) and `SysAdmin` (manages users, inherits all Manager capabilities).
-- Sessions expire after 30 minutes of inactivity; re-authentication required.
+- Sessions expire after 120 minutes of inactivity; re-authentication required.
 - Audit logs capture login attempts and manual access events.
 
 ### 6.2 Dashboard
@@ -213,4 +213,3 @@ OpsWriter extends the OpsSuite product family to cover manual authoring. It comp
 - Export table layout reference provided in sample PDF snippet (see image).
 - Dashboard action/button styling reference provided in latest UI screen (see image).
 - Glossary: Manual (collection of chapters), Chapter (hierarchical node with heading + content), Revision (saved state), Version (approved milestone).
-

@@ -69,13 +69,20 @@ export default function SignupPage() {
             id: data.user.id,
             email: email,
             full_name: fullName,
-            role: 'manager',
+            is_active: false,
           })
 
         if (profileError) throw profileError
+      } else {
+        throw new Error('Signup succeeded but no user record was returned. Please contact support.')
       }
 
-      router.push('/dashboard')
+      await supabase.auth.signOut()
+
+      const message = encodeURIComponent(
+        'Your account was created and is pending sysadmin approval. You will be notified once access is granted.'
+      )
+      router.push(`/login?message=${message}`)
       router.refresh()
     } catch (error: any) {
       setError(error.message || 'Failed to create account')

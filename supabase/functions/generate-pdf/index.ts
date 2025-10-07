@@ -58,7 +58,7 @@ serve(async (req) => {
       .from('export_jobs')
       .update({
         status: 'processing',
-        started_at: new Date().toISOString(),
+        processing_started_at: new Date().toISOString(),
       })
       .eq('id', jobId)
 
@@ -175,8 +175,8 @@ serve(async (req) => {
         .update({
           status: 'completed',
           file_path: uploadData.path,
-          download_url: signedUrlData?.signedUrl,
-          completed_at: new Date().toISOString(),
+          file_url: signedUrlData?.signedUrl || null,
+          processing_completed_at: new Date().toISOString(),
           file_size_bytes: pdfBuffer.byteLength,
         })
         .eq('id', jobId)

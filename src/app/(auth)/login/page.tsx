@@ -29,12 +29,30 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) throw error
+
+      if (!data.user) {
+        throw new Error('No user returned from Supabase login.')
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('is_active')
+        .eq('id', data.user.id)
+        .single()
+
+      if (profileError) throw profileError
+
+      if (!profile?.is_active) {
+        await supabase.auth.signOut()
+        setError('Your account is pending sysadmin approval. Please contact your system administrator.')
+        return
+      }
 
       router.push('/dashboard')
       router.refresh()

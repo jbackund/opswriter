@@ -160,7 +160,7 @@ Add the same environment variables from `.env.local` to your Vercel project sett
 
 - HTTPS enforcement in production
 - Row-level security policies on all database tables
-- Session timeout after 30 minutes of inactivity
+- Session timeout after 120 minutes of inactivity
 - Email domain restriction for user registration
 - Encrypted data at rest (via Supabase/AWS)
 - Immutable audit logs for compliance

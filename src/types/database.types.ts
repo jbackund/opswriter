@@ -143,6 +143,7 @@ export type Database = {
           is_mandatory: boolean
           manual_id: string
           page_break: boolean
+          regulatory_reference: string[] | null
           parent_id: string | null
           section_number: number | null
           subsection_number: number | null
@@ -162,6 +163,7 @@ export type Database = {
           is_mandatory?: boolean
           manual_id: string
           page_break?: boolean
+          regulatory_reference?: string[] | null
           parent_id?: string | null
           section_number?: number | null
           subsection_number?: number | null
@@ -181,6 +183,7 @@ export type Database = {
           is_mandatory?: boolean
           manual_id?: string
           page_break?: boolean
+          regulatory_reference?: string[] | null
           parent_id?: string | null
           section_number?: number | null
           subsection_number?: number | null
@@ -295,6 +298,7 @@ export type Database = {
           file_url: string | null
           id: string
           manual_id: string
+          file_size_bytes: number | null
           processing_completed_at: string | null
           processing_started_at: string | null
           revision_id: string | null
@@ -310,6 +314,7 @@ export type Database = {
           file_url?: string | null
           id?: string
           manual_id: string
+          file_size_bytes?: number | null
           processing_completed_at?: string | null
           processing_started_at?: string | null
           revision_id?: string | null
@@ -325,6 +330,7 @@ export type Database = {
           file_url?: string | null
           id?: string
           manual_id?: string
+          file_size_bytes?: number | null
           processing_completed_at?: string | null
           processing_started_at?: string | null
           revision_id?: string | null

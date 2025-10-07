@@ -9,7 +9,7 @@ interface UserProfile {
   email: string
   full_name: string
   role: 'sysadmin' | 'manager'
-  status: 'active' | 'inactive'
+  is_active: boolean
   created_at: string
   last_sign_in_at?: string
 }
@@ -52,7 +52,7 @@ export default function UserManagement({ initialUsers }: UserManagementProps) {
           email: inviteEmail,
           full_name: inviteName,
           role: inviteRole,
-          status: 'inactive', // Will become active on first login
+          is_active: false,
         })
         .select()
         .single()
@@ -72,22 +72,22 @@ export default function UserManagement({ initialUsers }: UserManagementProps) {
     }
   }
 
-  const toggleUserStatus = async (userId: string, currentStatus: string) => {
+  const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
     try {
-      const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
+      const newStatus = !currentStatus
 
       const { error } = await supabase
         .from('user_profiles')
-        .update({ status: newStatus })
+        .update({ is_active: newStatus })
         .eq('id', userId)
 
       if (error) throw error
 
       setUsers(users.map(user =>
-        user.id === userId ? { ...user, status: newStatus } : user
+        user.id === userId ? { ...user, is_active: newStatus } : user
       ))
 
-      setSuccess(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`)
+      setSuccess(`User ${newStatus ? 'activated' : 'deactivated'} successfully`)
     } catch (error: any) {
       setError(error.message || 'Failed to update user status')
     }
@@ -226,12 +226,12 @@ export default function UserManagement({ initialUsers }: UserManagementProps) {
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span
                     className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      user.status === 'active'
+                      user.is_active
                         ? 'bg-green-100 text-green-800'
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    {user.status}
+                    {user.is_active ? 'active' : 'inactive'}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -244,12 +244,12 @@ export default function UserManagement({ initialUsers }: UserManagementProps) {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <button
-                    onClick={() => toggleUserStatus(user.id, user.status)}
+                    onClick={() => toggleUserStatus(user.id, user.is_active)}
                     className={`${
-                      user.status === 'active' ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'
+                      user.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'
                     }`}
                   >
-                    {user.status === 'active' ? (
+                    {user.is_active ? (
                       <UserX className="h-5 w-5" />
                     ) : (
                       <UserCheck className="h-5 w-5" />
