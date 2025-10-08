@@ -103,36 +103,17 @@ export default function ActivityFeed({
       setError(null)
 
       try {
-        const { data, error: fetchError } = await supabase
-          .from('audit_logs')
-          .select(`
-            id,
-            action,
-            entity_type,
-            entity_id,
-            manual_id,
-            actor_id,
-            actor_email,
-            created_at,
-            details,
-            user:user_profiles!audit_logs_user_id_fkey(
-              full_name,
-              email
-            )
-          `)
-          .eq('manual_id', manualId)
-          .order('created_at', { ascending: false })
-          .limit(limit)
+        const response = await fetch(`/api/manuals/${manualId}/audit-logs?limit=${limit}`)
 
-        if (fetchError) {
-          throw fetchError
+        if (!response.ok) {
+          throw new Error('Failed to fetch activities')
         }
 
-        const fetchedActivities =
-          (data || []).map(item => ({
-            ...item,
-            details: item.details ?? (item as any).metadata ?? null,
-          })) as Activity[]
+        const payload = await response.json()
+        const fetchedActivities = (payload.audit_logs || []).map((item: any) => ({
+          ...item,
+          details: item.details ?? item.metadata ?? null,
+        })) as Activity[]
 
         if (isMounted) {
           setActivities(fetchedActivities)
@@ -154,54 +135,42 @@ export default function ActivityFeed({
     fetchActivities()
 
     const fetchActivityWithActor = async (activityId: string) => {
-      const { data, error: activityError } = await supabase
-        .from('audit_logs')
-        .select(`
-          id,
-          action,
-          entity_type,
-          entity_id,
-          manual_id,
-          actor_id,
-          actor_email,
-          created_at,
-          details,
-          user:user_profiles!audit_logs_user_id_fkey(
-            full_name,
-            email
-          )
-        `)
-        .eq('id', activityId)
-        .single()
+      try {
+        const response = await fetch(`/api/manuals/${manualId}/audit-logs?activityId=${activityId}`)
 
-      if (activityError) {
-        console.error('Failed to fetch real-time activity:', activityError)
-        return
-      }
-
-      if (!data) {
-        return
-      }
-
-      await loadActorProfiles([data.actor_id])
-
-      setActivities(prev => {
-        const existingIndex = prev.findIndex(activity => activity.id === data.id)
-        if (existingIndex !== -1) {
-          const next = [...prev]
-          next[existingIndex] = {
-            ...next[existingIndex],
-            ...data,
-            details: data.details ?? (data as any).metadata ?? null,
-          }
-          return next
+        if (!response.ok) {
+          throw new Error('Failed to fetch activity details')
         }
-        const hydrated = {
-          ...data,
-          details: data.details ?? (data as any).metadata ?? null,
-        } as Activity
-        return [hydrated, ...prev].slice(0, limit)
-      })
+
+        const payload = await response.json()
+        const data = Array.isArray(payload.audit_logs) ? payload.audit_logs[0] : payload.audit_logs
+
+        if (!data) {
+          return
+        }
+
+        await loadActorProfiles([data.actor_id])
+
+        setActivities(prev => {
+          const existingIndex = prev.findIndex(activity => activity.id === data.id)
+          if (existingIndex !== -1) {
+            const next = [...prev]
+            next[existingIndex] = {
+              ...next[existingIndex],
+              ...data,
+              details: data.details ?? data.metadata ?? null,
+            }
+            return next
+          }
+          const hydrated = {
+            ...data,
+            details: data.details ?? data.metadata ?? null,
+          } as Activity
+          return [hydrated, ...prev].slice(0, limit)
+        })
+      } catch (activityError) {
+        console.error('Failed to fetch real-time activity:', activityError)
+      }
     }
 
     const channel = supabase

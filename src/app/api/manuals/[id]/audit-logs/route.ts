@@ -20,7 +20,9 @@ export async function GET(
 
     const { id } = await params
     const manualId = id
-    const { searchParams } = new URL(request.url)
+    const url = new URL(request.url)
+    const searchParams = url.searchParams
+    const activityId = searchParams.get('activityId')
 
     // Pagination parameters
     const page = parseInt(searchParams.get('page') || '1')
@@ -43,6 +45,10 @@ export async function GET(
       .eq('manual_id', manualId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
+
+    if (activityId) {
+      query = query.eq('id', activityId)
+    }
 
     // Apply filters
     if (action) {
