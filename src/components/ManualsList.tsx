@@ -601,7 +601,12 @@ export default function ManualsList({ initialManuals, canDelete = false }: Manua
                       <tr key={manual.id}>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
                           <div>
-                            <div className="font-medium">{manual.title}</div>
+                            <Link
+                              href={`/dashboard/manuals/${manual.id}/edit`}
+                              className="font-medium text-docgen-blue hover:underline"
+                            >
+                              {manual.title}
+                            </Link>
                             <div className="text-gray-500">{manual.organization_name}</div>
                           </div>
                         </td>

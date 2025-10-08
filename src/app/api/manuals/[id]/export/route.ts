@@ -158,10 +158,16 @@ export async function POST(
     }
 
     const page = await browser.newPage()
+    const pxPerMillimeter = 96 / 25.4
+    const printableWidthPx = Math.round(210 * pxPerMillimeter)
+    const printableHeightPx = Math.round(297 * pxPerMillimeter)
+
+    await page.setViewport({ width: printableWidthPx, height: printableHeightPx })
+    await page.emulateMediaType('print')
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' })
 
-    const pdf = await page.pdf({
-      format: 'A4',
+    const pdfOptions = {
+      format: 'A4' as const,
       printBackground: true,
       margin: {
         top: '20mm',
@@ -172,7 +178,9 @@ export async function POST(
       displayHeaderFooter: true,
       headerTemplate: generateHeaderTemplate(manual),
       footerTemplate: generateFooterTemplate(manual),
-    })
+    }
+
+    const pdf = await page.pdf(pdfOptions)
 
     await browser.close()
 
@@ -311,14 +319,15 @@ function generatePDFHTML(
     }
 
     .toc-item {
-      margin: 5px 0;
+      margin: 2px 0;
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      padding: 4px 8px;
+      padding: 0.5px 4px;
       border-radius: 4px;
       text-decoration: none;
       color: #000;
+      line-height: 1.25;
     }
 
     .toc-item:hover {
@@ -337,9 +346,10 @@ function generatePDFHTML(
       min-width: 32px;
     }
 
-    .toc-item .toc-page {
-      margin-left: 12px;
-      min-width: 24px;
+    .toc-item::after {
+      content: target-counter(attr(href url), page);
+      margin-left: 8px;
+      min-width: 20px;
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
@@ -516,19 +526,12 @@ function generateTableOfContents(chapters: any[]): string {
       const chapterNumber = formatChapterNumber(chapter)
       const depth = typeof chapter.depth === 'number' ? chapter.depth : 0
       const anchorId = chapter.anchorId || getChapterAnchorId(chapter)
-      const pageLabel =
-        typeof chapter.page_number === 'number'
-          ? chapter.page_number
-          : typeof chapter.display_order === 'number'
-            ? chapter.display_order + 1
-            : ''
       return `
         <a class="toc-item" data-depth="${depth}" href="#${anchorId}">
           <span class="toc-title">
             ${chapterNumber ? `<span class="toc-number">${chapterNumber}</span>` : ''}
             <span class="toc-heading">${chapter.heading}</span>
           </span>
-          <span class="toc-page">${pageLabel}</span>
         </a>
       `
     })

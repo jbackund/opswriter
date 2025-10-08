@@ -52,11 +52,12 @@ export default function ExportButton({
       const data = await response.json()
 
       if (data.downloadUrl) {
-        const newTab = window.open(data.downloadUrl, '_blank', 'noopener,noreferrer')
+        const downloadUrl = data.downloadUrl
+        const newTab = window.open(downloadUrl, '_blank', 'noopener,noreferrer')
 
         if (!newTab) {
           const link = document.createElement('a')
-          link.href = data.downloadUrl
+          link.href = downloadUrl
           link.target = '_blank'
           link.rel = 'noopener noreferrer'
           document.body.appendChild(link)

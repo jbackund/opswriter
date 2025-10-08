@@ -19,6 +19,7 @@ import {
   Plus,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   Edit3,
   Trash2,
   Copy,
@@ -140,6 +141,7 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showMetadataModal, setShowMetadataModal] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   // Undo/Redo state
   const [chaptersHistory, setChaptersHistory] = useState<Chapter[][]>([initialManual.chapters || []])
@@ -1445,21 +1447,46 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
         {activeTab === 'editor' && (
           <>
         {/* Chapter navigation sidebar */}
-        <div className="w-80 bg-white border-r flex flex-col">
+        <div
+          className={`bg-white border-r flex flex-col transition-all duration-200 ${
+            sidebarCollapsed ? 'w-12' : 'w-80'
+          }`}
+        >
           <div className="p-4 border-b">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-semibold text-gray-900">Chapters</h2>
-              {!isReadOnly && (
+              {sidebarCollapsed ? (
                 <button
-                  onClick={() => addChapter(null)}
+                  onClick={() => setSidebarCollapsed(false)}
                   className="p-1.5 hover:bg-gray-100 rounded"
-                  title="Add chapter"
+                  title="Expand chapters"
                 >
-                  <Plus className="h-4 w-4 text-gray-600" />
+                  <ChevronRight className="h-4 w-4 text-gray-600" />
                 </button>
+              ) : (
+                <>
+                  <h2 className="text-lg font-semibold text-gray-900">Chapters</h2>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => setSidebarCollapsed(true)}
+                      className="p-1.5 hover:bg-gray-100 rounded"
+                      title="Collapse chapters"
+                    >
+                      <ChevronLeft className="h-4 w-4 text-gray-600" />
+                    </button>
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => addChapter(null)}
+                        className="p-1.5 hover:bg-gray-100 rounded"
+                        title="Add chapter"
+                      >
+                        <Plus className="h-4 w-4 text-gray-600" />
+                      </button>
+                    )}
+                  </div>
+                </>
               )}
             </div>
-            {!isReadOnly && (
+            {!sidebarCollapsed && !isReadOnly && (
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setReorderMode(!reorderMode)}
@@ -1494,13 +1521,17 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
               </div>
             )}
           </div>
-          <div className="flex-1 overflow-y-auto p-2">
-            {chapterTree.map(chapter => renderChapterItem(chapter))}
+          <div className={`flex-1 overflow-y-auto ${sidebarCollapsed ? 'p-2 flex items-center justify-center text-gray-500 text-xs' : 'p-2'}`}>
+            {sidebarCollapsed ? (
+              <span className="transform -rotate-90 whitespace-nowrap">Chapters</span>
+            ) : (
+              chapterTree.map(chapter => renderChapterItem(chapter))
+            )}
           </div>
         </div>
 
         {/* Chapter editor */}
-        <div className="flex-1 bg-gray-50 flex flex-col">
+        <div className={`flex-1 bg-gray-50 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'pl-0' : ''}`}>
           {selectedChapter ? (
             <>
               <div className="bg-white border-b px-6 py-4">
