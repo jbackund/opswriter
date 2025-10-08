@@ -13,13 +13,16 @@ import {
   Home,
   BookOpen,
   FileCheck,
-  BarChart3
+  BarChart3,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 
 export default function DashboardNav() {
   const pathname = usePathname()
   const router = useRouter()
   const [userRole, setUserRole] = useState<string>('manager')
+  const [collapsed, setCollapsed] = useState(false)
 
   useEffect(() => {
     const supabaseClient = createClient()
@@ -41,6 +44,19 @@ export default function DashboardNav() {
     fetchUserRole()
   }, [])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = window.localStorage.getItem('dashboard-nav-collapsed')
+    if (stored === 'true') {
+      setCollapsed(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('dashboard-nav-collapsed', collapsed ? 'true' : 'false')
+  }, [collapsed])
+
   const handleLogout = async () => {
     const supabaseClient = createClient()
     await supabaseClient.auth.signOut()
@@ -59,42 +75,76 @@ export default function DashboardNav() {
   ].filter(item => !item.requiresAdmin || userRole === 'sysadmin')
 
   return (
-    <nav className="w-64 bg-white shadow-lg">
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-center h-16 border-b">
-          <h1 className="text-xl font-bold text-docgen-blue">OPSWriter</h1>
+    <nav className="bg-white shadow-lg transition-all duration-200">
+      <div className="flex h-full">
+        <div
+          className={`flex flex-col border-r transition-all duration-200 ${
+            collapsed ? 'w-16' : 'w-64'
+          }`}
+        >
+          <div className="flex items-center justify-between h-16 border-b px-4">
+            <h1
+              className={`text-xl font-bold text-docgen-blue transition-opacity duration-200 ${
+                collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'
+              }`}
+            >
+              OPSWriter
+            </h1>
+            <button
+              onClick={() => setCollapsed(prev => !prev)}
+              className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition"
+              aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+            >
+              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <ul className="p-2 space-y-1">
+              {navigation.map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <li key={item.name}>
+                    <Link
+                      href={item.href}
+                      className={`flex items-center rounded-lg transition px-3 py-2 ${
+                        isActive
+                          ? 'bg-docgen-blue text-white'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      } ${collapsed ? 'justify-center' : 'space-x-3'}`}
+                      title={collapsed ? item.name : undefined}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      {!collapsed && <span className="font-medium">{item.name}</span>}
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+          <div className="border-t p-4">
+            <button
+              onClick={handleLogout}
+              className={`flex items-center px-3 py-2 w-full rounded-lg text-gray-700 hover:bg-gray-100 transition ${
+                collapsed ? 'justify-center' : 'space-x-3'
+              }`}
+              title={collapsed ? 'Logout' : undefined}
+            >
+              <LogOut className="h-5 w-5" />
+              {!collapsed && <span className="font-medium">Logout</span>}
+            </button>
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          <ul className="p-4 space-y-2">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href
-              return (
-                <li key={item.name}>
-                  <Link
-                    href={item.href}
-                    className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition ${
-                      isActive
-                        ? 'bg-docgen-blue text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <item.icon className="h-5 w-5" />
-                    <span className="font-medium">{item.name}</span>
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-        <div className="border-t p-4">
-          <button
-            onClick={handleLogout}
-            className="flex items-center space-x-3 px-3 py-2 w-full rounded-lg text-gray-700 hover:bg-gray-100 transition"
-          >
-            <LogOut className="h-5 w-5" />
-            <span className="font-medium">Logout</span>
-          </button>
-        </div>
+        {collapsed && (
+          <div className="flex flex-col justify-center border-l px-1">
+            <button
+              onClick={() => setCollapsed(false)}
+              className="m-2 p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition"
+              aria-label="Expand navigation"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </nav>
   )
