@@ -32,6 +32,7 @@ interface Manual {
   current_revision: string
   status: string
   effective_date: string | null
+  revision_date: string | null
   created_by: string
   created_by_user: UserProfile
   updated_at: string
@@ -44,7 +45,15 @@ interface ManualsListProps {
   canDelete?: boolean
 }
 
-type SortField = 'title' | 'manual_code' | 'current_revision' | 'status' | 'effective_date' | 'created_by_user' | 'updated_at'
+type SortField =
+  | 'title'
+  | 'manual_code'
+  | 'current_revision'
+  | 'status'
+  | 'effective_date'
+  | 'revision_date'
+  | 'created_by_user'
+  | 'updated_at'
 type SortDirection = 'asc' | 'desc'
 type StatusFilter = 'all' | 'draft' | 'in_review' | 'approved' | 'rejected'
 
@@ -583,6 +592,16 @@ export default function ManualsList({ initialManuals, canDelete = false }: Manua
                     <th
                       scope="col"
                       className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('revision_date')}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Revision Date</span>
+                        <SortIcon field="revision_date" />
+                      </div>
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('created_by_user')}
                     >
                       <div className="flex items-center space-x-1">
@@ -628,6 +647,9 @@ export default function ManualsList({ initialManuals, canDelete = false }: Manua
                         </td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                           {formatDate(manual.effective_date)}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                          {formatDate(manual.revision_date)}
                         </td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                           {manual.created_by_user?.full_name || manual.created_by_user?.email}
@@ -779,7 +801,7 @@ export default function ManualsList({ initialManuals, canDelete = false }: Manua
                 ))
               ) : (
                     <tr>
-                      <td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-500">
+                      <td colSpan={8} className="px-3 py-8 text-center text-sm text-gray-500">
                         {manuals.length === 0
                           ? 'No manuals found. Create your first manual to get started.'
                           : 'No manuals match the current filters.'}

@@ -16,6 +16,7 @@ interface Manual {
   status: string
   current_revision: string
   effective_date: string | null
+  revision_date: string | null
   organization_name: string
   created_by: string
   created_at: string
@@ -102,6 +103,7 @@ const ManualRow = memo(({ index, style, data }: {
             <p className="text-sm text-gray-500 truncate">
               {manual.manual_code} • Rev {manual.current_revision}
               {manual.effective_date && ` • Effective: ${new Date(manual.effective_date).toLocaleDateString()}`}
+              {manual.revision_date && ` • Revision: ${new Date(manual.revision_date).toLocaleDateString()}`}
             </p>
           </div>
         </div>

@@ -23,6 +23,7 @@ interface Manual {
   status: string
   current_revision: string
   effective_date: string | null
+  revision_date: string | null
   organization_name: string
   created_by: string
   created_at: string

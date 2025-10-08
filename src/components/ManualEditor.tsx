@@ -1264,6 +1264,18 @@ export default function ManualEditor({ manual: initialManual, userId, readOnly =
                 </span>
                 <span>•</span>
                 <span>Owner: {manual.created_by_user?.full_name || manual.created_by_user?.email}</span>
+                {manual.effective_date && (
+                  <>
+                    <span>•</span>
+                    <span>Effective: {new Date(manual.effective_date).toLocaleDateString()}</span>
+                  </>
+                )}
+                {manual.revision_date && (
+                  <>
+                    <span>•</span>
+                    <span>Revision: {new Date(manual.revision_date).toLocaleDateString()}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>

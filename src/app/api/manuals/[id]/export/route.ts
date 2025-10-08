@@ -464,6 +464,7 @@ function generatePDFHTML(
       <p><strong>Document Code:</strong> ${manual.manual_code}</p>
       <p><strong>Revision:</strong> ${manual.current_revision}</p>
       <p><strong>Effective Date:</strong> ${manual.effective_date || 'N/A'}</p>
+      <p><strong>Revision Date:</strong> ${manual.revision_date || 'N/A'}</p>
       <p><strong>Organization:</strong> ${manual.organization_name}</p>
     </div>
   </div>

@@ -58,6 +58,9 @@ export default function ManualMetadataModal({
   const [effectiveDate, setEffectiveDate] = useState(
     manual.effective_date ? manual.effective_date.split('T')[0] : ''
   )
+  const [revisionDate, setRevisionDate] = useState(
+    manual.revision_date ? manual.revision_date.split('T')[0] : ''
+  )
   const [tags, setTags] = useState<string[]>(manual.tags || [])
   const [tagInput, setTagInput] = useState('')
 
@@ -77,6 +80,7 @@ export default function ManualMetadataModal({
     setReferenceNumber(manual.reference_number || '')
     setLanguage(manual.language || 'en')
     setEffectiveDate(manual.effective_date ? manual.effective_date.split('T')[0] : '')
+    setRevisionDate(manual.revision_date ? manual.revision_date.split('T')[0] : '')
     setTags(manual.tags || [])
     setTagInput('')
     setCodeAvailable(true)
@@ -178,6 +182,7 @@ export default function ManualMetadataModal({
         reference_number: referenceNumber.trim() || null,
         language,
         effective_date: effectiveDate || null,
+        revision_date: revisionDate || null,
         tags: tags.length > 0 ? tags : null,
         updated_at: new Date().toISOString(),
         updated_by: userId,
@@ -358,6 +363,24 @@ export default function ManualMetadataModal({
                   type="date"
                   value={effectiveDate}
                   onChange={event => setEffectiveDate(event.target.value)}
+                  className="block w-full rounded-md border border-gray-300 py-2 pl-10 pr-3 text-sm focus:border-docgen-blue focus:ring-docgen-blue"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="metadata-revision-date" className="block text-sm font-medium text-gray-700">
+                Revision Date
+              </label>
+              <div className="mt-1 relative rounded-md shadow-sm">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Calendar className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="metadata-revision-date"
+                  type="date"
+                  value={revisionDate}
+                  onChange={event => setRevisionDate(event.target.value)}
                   className="block w-full rounded-md border border-gray-300 py-2 pl-10 pr-3 text-sm focus:border-docgen-blue focus:ring-docgen-blue"
                 />
               </div>

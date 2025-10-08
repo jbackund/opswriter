@@ -506,6 +506,7 @@ export type Database = {
           current_revision: string
           description: string | null
           effective_date: string | null
+          revision_date: string | null
           id: string
           is_archived: boolean
           language: string | null
@@ -527,6 +528,7 @@ export type Database = {
           current_revision?: string
           description?: string | null
           effective_date?: string | null
+          revision_date?: string | null
           id?: string
           is_archived?: boolean
           language?: string | null
@@ -548,6 +550,7 @@ export type Database = {
           current_revision?: string
           description?: string | null
           effective_date?: string | null
+          revision_date?: string | null
           id?: string
           is_archived?: boolean
           language?: string | null

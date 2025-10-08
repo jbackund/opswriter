@@ -49,6 +49,7 @@ CREATE TABLE manuals (
   status manual_status NOT NULL DEFAULT 'draft',
   current_revision TEXT NOT NULL DEFAULT '0',
   effective_date DATE,
+  revision_date DATE,
   review_due_date DATE,
   is_archived BOOLEAN NOT NULL DEFAULT false,
   metadata JSONB DEFAULT '{}', -- For extensible custom fields

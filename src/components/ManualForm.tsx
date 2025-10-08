@@ -55,6 +55,7 @@ interface Manual {
   reference_number: string | null
   tags: string[] | null
   effective_date: string | null
+  revision_date: string | null
   cover_logo_url: string | null
 }
 
@@ -89,7 +90,12 @@ export default function ManualForm({
   const [referenceNumber, setReferenceNumber] = useState(sourceManual?.reference_number || '')
   const [tags, setTags] = useState<string[]>(sourceManual?.tags || [])
   const [tagInput, setTagInput] = useState('')
-  const [effectiveDate, setEffectiveDate] = useState('')
+  const [effectiveDate, setEffectiveDate] = useState(
+    sourceManual?.effective_date ? sourceManual.effective_date.split('T')[0] : ''
+  )
+  const [revisionDate, setRevisionDate] = useState(
+    sourceManual?.revision_date ? sourceManual.revision_date.split('T')[0] : ''
+  )
   const [coverLogoUrl, setCoverLogoUrl] = useState(sourceManual?.cover_logo_url || '')
   const [uploadingLogo, setUploadingLogo] = useState(false)
 
@@ -277,6 +283,7 @@ export default function ManualForm({
           status: 'draft',
           current_revision: '0',
           effective_date: effectiveDate || null,
+          revision_date: revisionDate || null,
           cover_logo_url: coverLogoUrl || null,
           created_by: userProfile?.id,
           is_archived: false
@@ -636,6 +643,24 @@ export default function ManualForm({
                 id="effective-date"
                 value={effectiveDate}
                 onChange={(e) => setEffectiveDate(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-docgen-blue focus:border-docgen-blue sm:text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="revision-date" className="block text-sm font-medium text-gray-700">
+              Revision Date
+            </label>
+            <div className="mt-1 relative rounded-md shadow-sm">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Calendar className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="date"
+                id="revision-date"
+                value={revisionDate}
+                onChange={(e) => setRevisionDate(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-docgen-blue focus:border-docgen-blue sm:text-sm"
               />
             </div>

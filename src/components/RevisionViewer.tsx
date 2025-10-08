@@ -296,6 +296,11 @@ export default function RevisionViewer({
                     <strong>Effective:</strong> {new Date(manual.effective_date).toLocaleDateString()}
                   </div>
                 )}
+                {manual?.revision_date && (
+                  <div>
+                    <strong>Revision:</strong> {new Date(manual.revision_date).toLocaleDateString()}
+                  </div>
+                )}
               </div>
             </div>
 
